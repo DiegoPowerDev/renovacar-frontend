@@ -4,6 +4,7 @@ export default function HomeFooter() {
       <div className="flex w-full justify-end">
         {process.env.NODE_ENV}
         <div>Website developed by Diego Torres</div>
+        {process.env.API_URL}
       </div>
     </div>
   );
