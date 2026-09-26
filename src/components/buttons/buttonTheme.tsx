@@ -1,6 +1,6 @@
 "use client";
 import { Moon, Sun } from "lucide-react";
-import { useDashboardStore } from "@/store/dashboardStore";
+import { useDashboardStore } from "@/stores/dashboardStore";
 
 export default function ButtonTheme() {
   const { theme, setTheme } = useDashboardStore();
