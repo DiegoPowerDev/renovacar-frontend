@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { statsApi } from "@/lib/api"; // ajusta la ruta
+import {
+  useStatsStore,
+  type StatsFiltros,
+  type DashboardData,
+} from "@/stores/useStatsStore"; // ajusta la ruta
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,7 +28,6 @@ import {
   Wrench,
   CheckCircle2,
   PackageCheck,
-  Banknote,
   AlertCircle,
   RefreshCw,
   Search,
@@ -37,59 +40,12 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
   LineChart,
   Line,
   Legend,
+  Cell,
 } from "recharts";
 import { formatDate } from "date-fns";
-import { StatsFiltros } from "@/types/types";
-
-// ======================
-// TIPOS
-// ======================
-type DashboardData = {
-  resumen: {
-    clientes: number;
-    vehiculos: number;
-    ordenes: number;
-    enProceso: number;
-    listas: number;
-    entregadas: number;
-    canceladas: number;
-    borrador: number;
-  };
-  finanzas: {
-    totalFacturado: number;
-    totalCobrado: number;
-    totalPorCobrar: number;
-    margenCobrado: number;
-  };
-  porEstado: { estado: string; cantidad: number }[];
-  vehiculosEnTaller: {
-    total: number;
-    porEtapa: { etapa: string; cantidad: number; vehiculos: any[] }[];
-  };
-  ventasPorDia: {
-    fecha: string;
-    facturado: number;
-    cobrado: number;
-    ordenes: number;
-  }[];
-  ultimasOrdenes: {
-    numero: string;
-    fecha: string;
-    estado: string;
-    total: number;
-    totalPagado: number;
-    saldoPendiente: number;
-    placa: string;
-    vehiculo: string;
-    cliente: string;
-  }[];
-};
 
 const COLORES_ESTADO: Record<string, string> = {
   BORRADOR: "#94a3b8",
@@ -108,9 +64,6 @@ const formatoSoles = (n: number) =>
     minimumFractionDigits: 0,
   }).format(n);
 
-// ======================
-// CARD KPI
-// ======================
 function KpiCard({
   title,
   value,
@@ -133,7 +86,7 @@ function KpiCard({
   };
 
   return (
-    <Card className="">
+    <Card>
       <CardContent className="p-5">
         <div className="flex items-start justify-between">
           <div>
@@ -154,10 +107,9 @@ function KpiCard({
   );
 }
 
-// ======================
-// DASHBOARD
-// ======================
 export default function MainDashboard() {
+  const getDashboard = useStatsStore((s) => s.getDashboard);
+
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -174,17 +126,16 @@ export default function MainDashboard() {
       setLoading(true);
       setError("");
 
-      // limpiar filtros vacíos
       const params: StatsFiltros = {};
       if (f?.desde) params.desde = f.desde;
       if (f?.hasta) params.hasta = f.hasta;
       if (f?.estado) params.estado = f.estado;
       if (f?.placa) params.placa = f.placa;
 
-      const res = await statsApi.getAll(params);
+      const res = await getDashboard(params);
       setData(res);
     } catch (err: any) {
-      setError(err?.response?.data?.message || "Error al cargar estadísticas");
+      setError(err?.message || "Error al cargar estadísticas");
     } finally {
       setLoading(false);
     }
@@ -229,6 +180,7 @@ export default function MainDashboard() {
           Actualizar
         </Button>
       </div>
+
       {/* Filtros */}
       <Card className="flex h-24 bg-white/10 p-4 shrink-0">
         <CardContent className="text-white grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
@@ -236,18 +188,18 @@ export default function MainDashboard() {
             <label className="text-xs text-white/40 mb-1 block">Desde</label>
             <Input
               type="date"
-              value={filtros.desde}
+              value={filtros.desde || ""}
               onChange={(e) =>
                 setFiltros((f) => ({ ...f, desde: e.target.value }))
               }
-              className="bg-white/5 text-white! border-white/10 "
+              className="bg-white/5 text-white border-white/10"
             />
           </div>
           <div>
             <label className="text-xs text-white/40 mb-1 block">Hasta</label>
             <Input
               type="date"
-              value={filtros.hasta}
+              value={filtros.hasta || ""}
               onChange={(e) =>
                 setFiltros((f) => ({ ...f, hasta: e.target.value }))
               }
@@ -287,7 +239,7 @@ export default function MainDashboard() {
               />
               <Input
                 placeholder="ABC-123"
-                value={filtros.placa}
+                value={filtros.placa || ""}
                 onChange={(e) =>
                   setFiltros((f) => ({ ...f, placa: e.target.value }))
                 }
@@ -312,7 +264,7 @@ export default function MainDashboard() {
           </div>
         </CardContent>
       </Card>
-      {/* Loading / Error */}
+
       {loading ? (
         <div className="flex items-center justify-center h-64">
           <div className="flex flex-col items-center gap-3">
@@ -326,7 +278,6 @@ export default function MainDashboard() {
         </div>
       ) : data ? (
         <div className="flex-1 w-full overflow-y-auto px-12 py-4 flex flex-col gap-4">
-          {/* KPI Cards */}
           <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
             <KpiCard
               title="Clientes"
@@ -366,6 +317,7 @@ export default function MainDashboard() {
               subtitle={`${data.finanzas.margenCobrado}% cobrado`}
             />
           </div>
+
           {/* Finanzas + Estados */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {/* Finanzas */}
@@ -614,7 +566,10 @@ export default function MainDashboard() {
                           </span>
                         </td>
                         <td className="py-3 text-white/50">
-                          {formatDate(new Date(ot.fecha), "dd/MM/yyyy")}
+                          {formatDate(
+                            new Date(ot.fecha || Date.now()),
+                            "dd/MM/yyyy",
+                          )}
                         </td>
                       </tr>
                     ))}

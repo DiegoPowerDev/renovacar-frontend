@@ -1,7 +1,10 @@
 "use client";
 
-import { cotizacionesApi } from "@/lib/api";
-import { useEffect, useState, useMemo } from "react";
+import { useState, useMemo } from "react";
+import {
+  useCatalogoStore,
+  type ServicioCatalogo,
+} from "@/stores/useCatalogoStore";
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { Label } from "../ui/label";
@@ -24,7 +27,6 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { ItemCatalogo } from "@/types/types";
 
 type ServicioForm = {
   nombre: string;
@@ -49,8 +51,8 @@ const formatoPrecio = (n: number) =>
 // CARD
 // ======================
 interface CardProps {
-  data: ItemCatalogo;
-  onClick: (item: ItemCatalogo) => void;
+  data: ServicioCatalogo;
+  onClick: (item: ServicioCatalogo) => void;
 }
 
 const CatalogoCard = ({ data, onClick }: CardProps) => {
@@ -100,55 +102,43 @@ const CatalogoCard = ({ data, onClick }: CardProps) => {
 // DASHBOARD
 // ======================
 export default function CatalogoDashboard() {
+  const {
+    servicios,
+    loading,
+    error: storeError,
+    create,
+    update,
+    remove,
+  } = useCatalogoStore();
+
   const [search, setSearch] = useState("");
-  const [data, setData] = useState<ItemCatalogo[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // Detalle / editar
   const [openDetail, setOpenDetail] = useState(false);
-  const [seleccionado, setSeleccionado] = useState<ItemCatalogo | null>(null);
+  const [seleccionado, setSeleccionado] = useState<ServicioCatalogo | null>(
+    null,
+  );
   const [modoEdicion, setModoEdicion] = useState(false);
   const [form, setForm] = useState<ServicioForm>(formVacio);
   const [formError, setFormError] = useState("");
 
-  // Crear
   const [openCreate, setOpenCreate] = useState(false);
   const [createForm, setCreateForm] = useState<ServicioForm>(formVacio);
   const [createError, setCreateError] = useState("");
 
-  // Eliminar
   const [openDelete, setOpenDelete] = useState(false);
 
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      setError("");
-      const res = await cotizacionesApi.traerServicios();
-      setData(res);
-    } catch (err: any) {
-      setError(err?.response?.data?.message || "Error al cargar servicios");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadData();
-  }, []);
-
   const dataFiltrada = useMemo(() => {
-    if (!search.trim()) return data;
+    if (!search.trim()) return servicios;
     const term = search.toLowerCase().trim();
-    return data.filter((c) => {
+    return servicios.filter((c) => {
       return (
         c.nombre?.toLowerCase().includes(term) ||
         c.descripcion?.toLowerCase().includes(term) ||
         c.precioBase?.toString().includes(term)
       );
     });
-  }, [data, search]);
+  }, [servicios, search]);
 
   const hayCambios = useMemo(() => {
     if (!seleccionado) return false;
@@ -160,8 +150,7 @@ export default function CatalogoDashboard() {
     );
   }, [form, seleccionado]);
 
-  // ----- Detalle -----
-  const abrirDetalle = (item: ItemCatalogo) => {
+  const abrirDetalle = (item: ServicioCatalogo) => {
     setSeleccionado(item);
     setForm({
       nombre: item.nombre || "",
@@ -208,27 +197,20 @@ export default function CatalogoDashboard() {
     try {
       setSaving(true);
       setFormError("");
-      const actualizado = await cotizacionesApi.actualizarServicio(
-        seleccionado.id,
-        {
-          nombre: form.nombre.trim(),
-          descripcion: form.descripcion.trim() || undefined,
-          precioBase: precio,
-        },
-      );
+      const actualizado = await update(seleccionado.id, {
+        nombre: form.nombre.trim(),
+        descripcion: form.descripcion.trim() || undefined,
+        precioBase: precio,
+      });
       setSeleccionado(actualizado);
       setModoEdicion(false);
-      await loadData();
     } catch (err: any) {
-      setFormError(
-        err?.response?.data?.message || "Error al guardar los cambios",
-      );
+      setFormError(err?.message || "Error al guardar los cambios");
     } finally {
       setSaving(false);
     }
   };
 
-  // ----- Crear -----
   const abrirCrear = () => {
     setCreateForm(formVacio);
     setCreateError("");
@@ -249,45 +231,39 @@ export default function CatalogoDashboard() {
     try {
       setSaving(true);
       setCreateError("");
-      await cotizacionesApi.crearServicio({
+      await create({
         nombre: createForm.nombre.trim(),
         descripcion: createForm.descripcion.trim() || undefined,
         precioBase: precio,
       });
       setOpenCreate(false);
-      await loadData();
     } catch (err: any) {
-      setCreateError(
-        err?.response?.data?.message || "Error al crear el servicio",
-      );
+      setCreateError(err?.message || "Error al crear el servicio");
     } finally {
       setSaving(false);
     }
   };
 
-  // ----- Eliminar (soft delete) -----
   const eliminar = async () => {
     if (!seleccionado) return;
     try {
       setSaving(true);
-      await cotizacionesApi.eliminarServicio(seleccionado.id);
+      await remove(seleccionado.id); // soft: activo = false
       setOpenDelete(false);
       setOpenDetail(false);
       setSeleccionado(null);
-      await loadData();
     } catch (err: any) {
-      setFormError(
-        err?.response?.data?.message || "No se pudo eliminar el servicio",
-      );
+      setFormError(err?.message || "No se pudo eliminar el servicio");
       setOpenDelete(false);
     } finally {
       setSaving(false);
     }
   };
 
+  const error = storeError || "";
+
   return (
     <div className="flex-1 w-full flex flex-col gap-6 p-6">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-emerald-500/15 text-emerald-400">
@@ -300,7 +276,7 @@ export default function CatalogoDashboard() {
             <p className="text-sm text-white/50">
               {loading
                 ? "Cargando..."
-                : `${dataFiltrada.length} de ${data.length} servicios`}
+                : `${dataFiltrada.length} de ${servicios.length} servicios`}
             </p>
           </div>
         </div>
@@ -329,7 +305,6 @@ export default function CatalogoDashboard() {
         </div>
       </div>
 
-      {/* Contenido */}
       <div className="flex-1">
         {loading ? (
           <div className="flex items-center justify-center h-64">
@@ -372,9 +347,7 @@ export default function CatalogoDashboard() {
         )}
       </div>
 
-      {/* ====================== */}
       {/* MODAL DETALLE / EDITAR */}
-      {/* ====================== */}
       <Dialog
         open={openDetail}
         onOpenChange={(open) => {
@@ -408,7 +381,6 @@ export default function CatalogoDashboard() {
                 className="bg-white/5 border-white/10 disabled:opacity-60"
               />
             </div>
-
             <div className="space-y-2">
               <Label>Descripción</Label>
               <Input
@@ -420,7 +392,6 @@ export default function CatalogoDashboard() {
                 className="bg-white/5 border-white/10 disabled:opacity-60"
               />
             </div>
-
             <div className="space-y-2">
               <Label>Precio base (S/)</Label>
               <Input
@@ -435,13 +406,11 @@ export default function CatalogoDashboard() {
                 className="bg-white/5 border-white/10 disabled:opacity-60"
               />
             </div>
-
             {!modoEdicion && seleccionado && (
               <p className="text-sm text-emerald-400 font-medium">
                 {formatoPrecio(seleccionado.precioBase ?? 0)}
               </p>
             )}
-
             {formError && <p className="text-sm text-rose-400">{formError}</p>}
           </div>
 
@@ -488,9 +457,7 @@ export default function CatalogoDashboard() {
         </DialogContent>
       </Dialog>
 
-      {/* ====================== */}
-      {/* MODAL CREAR            */}
-      {/* ====================== */}
+      {/* MODAL CREAR */}
       <Dialog open={openCreate} onOpenChange={setOpenCreate}>
         <DialogContent className="bg-zinc-900 border-white/10 text-white sm:max-w-md">
           <DialogHeader>
@@ -514,7 +481,6 @@ export default function CatalogoDashboard() {
                 className="bg-white/5 border-white/10"
               />
             </div>
-
             <div className="space-y-2">
               <Label>Descripción</Label>
               <Input
@@ -526,7 +492,6 @@ export default function CatalogoDashboard() {
                 className="bg-white/5 border-white/10"
               />
             </div>
-
             <div className="space-y-2">
               <Label>
                 Precio base (S/) <span className="text-rose-400">*</span>
@@ -543,7 +508,6 @@ export default function CatalogoDashboard() {
                 className="bg-white/5 border-white/10"
               />
             </div>
-
             {createError && (
               <p className="text-sm text-rose-400">{createError}</p>
             )}
@@ -569,9 +533,7 @@ export default function CatalogoDashboard() {
         </DialogContent>
       </Dialog>
 
-      {/* ====================== */}
-      {/* MODAL ELIMINAR         */}
-      {/* ====================== */}
+      {/* MODAL ELIMINAR */}
       <Dialog open={openDelete} onOpenChange={setOpenDelete}>
         <DialogContent className="bg-zinc-900 border-white/10 text-white sm:max-w-sm">
           <DialogHeader>

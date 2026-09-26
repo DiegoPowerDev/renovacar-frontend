@@ -1,7 +1,7 @@
 "use client";
 import { BookUser, Bot, Home, Settings, Sidebar, User } from "lucide-react";
 import { cn } from "../../lib/utils";
-import { useDashboardStore } from "../../store/dashboardStore";
+import { useDashboardStore } from "@/stores/dashboardStore";
 import { screens } from "@/content/screens";
 import Image from "next/image";
 

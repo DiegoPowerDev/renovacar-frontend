@@ -1,7 +1,8 @@
 "use client";
 
-import { vehiculosApi, clientesApi } from "@/lib/api";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useVehiculosStore, type Vehiculo } from "@/stores/useVehiculosStore";
+import { useClientesStore } from "@/stores/useClientesStore";
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { Label } from "../ui/label";
@@ -26,11 +27,7 @@ import {
   X,
 } from "lucide-react";
 import { formatDate } from "date-fns";
-import { Vehiculo, Cliente } from "@/types/types";
 
-// ======================
-// TYPES
-// ======================
 type VehiculoForm = {
   placa: string;
   marca: string;
@@ -65,6 +62,15 @@ const clienteVacio: ClienteCreateForm = {
   correo: "",
 };
 
+function fmtDate(
+  value: Date | string | null | undefined,
+  pattern = "dd MMM yyyy",
+) {
+  if (!value) return "—";
+  const d = value instanceof Date ? value : new Date(value);
+  return formatDate(d, pattern);
+}
+
 // ======================
 // CARD
 // ======================
@@ -74,7 +80,16 @@ interface CardProps {
 }
 
 const VehicleCard = ({ data, onClick }: CardProps) => {
-  const { placa, marca, modelo, anio, color, creadoEn, cliente } = data;
+  const {
+    placa,
+    marca,
+    modelo,
+    anio,
+    color,
+    creadoEn,
+    cliente,
+    clienteNombre,
+  } = data;
 
   return (
     <button
@@ -102,7 +117,9 @@ const VehicleCard = ({ data, onClick }: CardProps) => {
       <div className="flex flex-col gap-2.5 text-sm">
         <div className="flex items-center gap-2.5 text-white/70">
           <User size={15} className="shrink-0 text-white/40" />
-          <span className="truncate">{cliente?.nombre || "Sin dueño"}</span>
+          <span className="truncate">
+            {cliente?.nombre || clienteNombre || "Sin dueño"}
+          </span>
         </div>
         <div className="flex items-center gap-2.5 text-white/70">
           <Palette size={15} className="shrink-0 text-white/40" />
@@ -116,9 +133,7 @@ const VehicleCard = ({ data, onClick }: CardProps) => {
         </div>
         <div className="flex items-center gap-2.5 text-white/70">
           <Calendar size={15} className="shrink-0 text-white/40" />
-          <span className="truncate">
-            {creadoEn ? formatDate(new Date(creadoEn), "dd MMM yyyy") : "—"}
-          </span>
+          <span className="truncate">{fmtDate(creadoEn)}</span>
         </div>
       </div>
 
@@ -131,21 +146,26 @@ const VehicleCard = ({ data, onClick }: CardProps) => {
 // DASHBOARD
 // ======================
 export default function VehiclessDashboard() {
+  const {
+    vehiculos,
+    loading,
+    error: storeError,
+    create,
+    update,
+    remove,
+  } = useVehiculosStore();
+
+  const { clientes } = useClientesStore();
+
   const [search, setSearch] = useState("");
-  const [data, setData] = useState<Vehiculo[]>([]);
-  const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // Detalle / editar
   const [openDetail, setOpenDetail] = useState(false);
   const [seleccionado, setSeleccionado] = useState<Vehiculo | null>(null);
   const [modoEdicion, setModoEdicion] = useState(false);
   const [form, setForm] = useState<VehiculoForm>(vehiculoVacio);
   const [formError, setFormError] = useState("");
 
-  // Crear
   const [openCreate, setOpenCreate] = useState(false);
   const [createVehiculo, setCreateVehiculo] =
     useState<VehiculoForm>(vehiculoVacio);
@@ -158,44 +178,23 @@ export default function VehiclessDashboard() {
   const [busquedaCliente, setBusquedaCliente] = useState("");
   const [createError, setCreateError] = useState("");
 
-  // Eliminar
   const [openDelete, setOpenDelete] = useState(false);
 
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      setError("");
-      const [vehiculosRes, clientesRes] = await Promise.all([
-        vehiculosApi.getAll(),
-        clientesApi.getAll(),
-      ]);
-      setData(vehiculosRes);
-      setClientes(clientesRes);
-    } catch (err: any) {
-      setError(err?.response?.data?.message || "Error al cargar vehículos");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadData();
-  }, []);
-
   const dataFiltrada = useMemo(() => {
-    if (!search.trim()) return data;
+    if (!search.trim()) return vehiculos;
     const term = search.toLowerCase().trim();
-    return data.filter((v) => {
+    return vehiculos.filter((v) => {
       return (
         v.placa?.toLowerCase().includes(term) ||
         v.marca?.toLowerCase().includes(term) ||
         v.modelo?.toLowerCase().includes(term) ||
         v.color?.toLowerCase().includes(term) ||
         v.anio?.toString().includes(term) ||
-        v.cliente?.nombre?.toLowerCase().includes(term)
+        v.cliente?.nombre?.toLowerCase().includes(term) ||
+        v.clienteNombre?.toLowerCase().includes(term)
       );
     });
-  }, [data, search]);
+  }, [vehiculos, search]);
 
   const clientesFiltrados = useMemo(() => {
     if (!busquedaCliente.trim()) return clientes.slice(0, 8);
@@ -223,7 +222,6 @@ export default function VehiclessDashboard() {
     );
   }, [form, seleccionado]);
 
-  // ----- Detalle -----
   const abrirDetalle = (vehiculo: Vehiculo) => {
     setSeleccionado(vehiculo);
     setForm({
@@ -272,7 +270,7 @@ export default function VehiclessDashboard() {
     try {
       setSaving(true);
       setFormError("");
-      const actualizado = await vehiculosApi.update(seleccionado.id, {
+      const actualizado = await update(seleccionado.id, {
         placa: form.placa.trim().toUpperCase(),
         marca: form.marca.trim(),
         modelo: form.modelo.trim(),
@@ -282,17 +280,13 @@ export default function VehiclessDashboard() {
       });
       setSeleccionado(actualizado);
       setModoEdicion(false);
-      await loadData();
     } catch (err: any) {
-      setFormError(
-        err?.response?.data?.message || "Error al guardar los cambios",
-      );
+      setFormError(err?.message || "Error al guardar los cambios");
     } finally {
       setSaving(false);
     }
   };
 
-  // ----- Crear -----
   const abrirCrear = () => {
     setCreateVehiculo(vehiculoVacio);
     setCreateCliente(clienteVacio);
@@ -312,12 +306,10 @@ export default function VehiclessDashboard() {
       setCreateError("Placa, marca y modelo son obligatorios");
       return;
     }
-
     if (modoCliente === "existente" && !clienteIdSeleccionado) {
       setCreateError("Selecciona un cliente existente");
       return;
     }
-
     if (modoCliente === "nuevo" && !createCliente.nombre.trim()) {
       setCreateError("El nombre del dueño es obligatorio");
       return;
@@ -337,12 +329,9 @@ export default function VehiclessDashboard() {
       };
 
       if (modoCliente === "existente") {
-        await vehiculosApi.create({
-          ...base,
-          clienteId: clienteIdSeleccionado,
-        });
+        await create({ ...base, clienteId: clienteIdSeleccionado });
       } else {
-        await vehiculosApi.create({
+        await create({
           ...base,
           cliente: {
             nombre: createCliente.nombre.trim(),
@@ -355,35 +344,32 @@ export default function VehiclessDashboard() {
       }
 
       setOpenCreate(false);
-      await loadData();
     } catch (err: any) {
-      setCreateError(
-        err?.response?.data?.message || "Error al registrar el vehículo",
-      );
+      setCreateError(err?.message || "Error al registrar el vehículo");
     } finally {
       setSaving(false);
     }
   };
 
-  // ----- Eliminar -----
   const eliminar = async () => {
     if (!seleccionado) return;
     try {
       setSaving(true);
-      await vehiculosApi.remove(seleccionado.id);
+      await remove(seleccionado.id);
       setOpenDelete(false);
       setOpenDetail(false);
       setSeleccionado(null);
-      await loadData();
     } catch (err: any) {
-      setFormError(
-        err?.response?.data?.message || "No se pudo eliminar el vehículo",
-      );
+      setFormError(err?.message || "No se pudo eliminar el vehículo");
       setOpenDelete(false);
     } finally {
       setSaving(false);
     }
   };
+
+  const error = storeError || "";
+  const dueño =
+    seleccionado?.cliente?.nombre || seleccionado?.clienteNombre || null;
 
   return (
     <div className="flex-1 w-full flex flex-col gap-6 p-6">
@@ -398,7 +384,7 @@ export default function VehiclessDashboard() {
             <p className="text-sm text-white/50">
               {loading
                 ? "Cargando..."
-                : `${dataFiltrada.length} de ${data.length} vehículos`}
+                : `${dataFiltrada.length} de ${vehiculos.length} vehículos`}
             </p>
           </div>
         </div>
@@ -474,9 +460,7 @@ export default function VehiclessDashboard() {
         )}
       </div>
 
-      {/* ====================== */}
       {/* MODAL DETALLE / EDITAR */}
-      {/* ====================== */}
       <Dialog
         open={openDetail}
         onOpenChange={(open) => {
@@ -494,8 +478,8 @@ export default function VehiclessDashboard() {
             <DialogDescription className="text-white/50">
               {modoEdicion
                 ? "Modifica los campos y guarda los cambios"
-                : seleccionado?.cliente?.nombre
-                  ? `Dueño: ${seleccionado.cliente.nombre}`
+                : dueño
+                  ? `Dueño: ${dueño}`
                   : "Información del vehículo"}
             </DialogDescription>
           </DialogHeader>
@@ -515,7 +499,6 @@ export default function VehiclessDashboard() {
                 className="bg-white/5 border-white/10 disabled:opacity-60 font-semibold tracking-wider"
               />
             </div>
-
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>Marca</Label>
@@ -540,7 +523,6 @@ export default function VehiclessDashboard() {
                 />
               </div>
             </div>
-
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>Año</Label>
@@ -566,7 +548,6 @@ export default function VehiclessDashboard() {
                 />
               </div>
             </div>
-
             <div className="space-y-2">
               <Label>VIN</Label>
               <Input
@@ -582,13 +563,9 @@ export default function VehiclessDashboard() {
             {seleccionado?.creadoEn && !modoEdicion && (
               <p className="text-xs text-white/40">
                 Registrado el{" "}
-                {formatDate(
-                  new Date(seleccionado.creadoEn),
-                  "dd MMM yyyy HH:mm",
-                )}
+                {fmtDate(seleccionado.creadoEn, "dd MMM yyyy HH:mm")}
               </p>
             )}
-
             {formError && <p className="text-sm text-rose-400">{formError}</p>}
           </div>
 
@@ -635,9 +612,7 @@ export default function VehiclessDashboard() {
         </DialogContent>
       </Dialog>
 
-      {/* ====================== */}
-      {/* MODAL CREAR            */}
-      {/* ====================== */}
+      {/* MODAL CREAR — mismo JSX que tenías; solo cambia el handler guardarNuevo */}
       <Dialog open={openCreate} onOpenChange={setOpenCreate}>
         <DialogContent className="bg-zinc-900 border-white/10 text-white sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -648,11 +623,10 @@ export default function VehiclessDashboard() {
           </DialogHeader>
 
           <div className="flex flex-col gap-5 py-2">
-            {/* Datos del vehículo */}
             <p className="text-xs font-medium text-emerald-400 uppercase tracking-wide">
               Vehículo
             </p>
-
+            {/* ... mismos campos de createVehiculo que ya tenías ... */}
             <div className="space-y-2">
               <Label>
                 Placa <span className="text-rose-400">*</span>
@@ -669,7 +643,6 @@ export default function VehiclessDashboard() {
                 className="bg-white/5 border-white/10 font-semibold tracking-wider"
               />
             </div>
-
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>
@@ -698,7 +671,6 @@ export default function VehiclessDashboard() {
                 />
               </div>
             </div>
-
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>Año</Label>
@@ -724,7 +696,6 @@ export default function VehiclessDashboard() {
                 />
               </div>
             </div>
-
             <div className="space-y-2">
               <Label>VIN</Label>
               <Input
@@ -737,13 +708,10 @@ export default function VehiclessDashboard() {
               />
             </div>
 
-            {/* Dueño */}
             <div className="pt-2 border-t border-white/10 space-y-3">
               <p className="text-xs font-medium text-emerald-400 uppercase tracking-wide">
                 Dueño
               </p>
-
-              {/* Tabs */}
               <div className="flex gap-2">
                 <Button
                   type="button"
@@ -787,7 +755,6 @@ export default function VehiclessDashboard() {
                       className="pl-9 bg-white/5 border-white/10"
                     />
                   </div>
-
                   <div className="max-h-40 overflow-y-auto space-y-1 rounded-lg border border-white/10 p-1">
                     {clientesFiltrados.length === 0 ? (
                       <p className="text-xs text-white/40 p-2 text-center">
@@ -905,9 +872,7 @@ export default function VehiclessDashboard() {
         </DialogContent>
       </Dialog>
 
-      {/* ====================== */}
-      {/* MODAL ELIMINAR         */}
-      {/* ====================== */}
+      {/* MODAL ELIMINAR */}
       <Dialog open={openDelete} onOpenChange={setOpenDelete}>
         <DialogContent className="bg-zinc-900 border-white/10 text-white sm:max-w-sm">
           <DialogHeader>

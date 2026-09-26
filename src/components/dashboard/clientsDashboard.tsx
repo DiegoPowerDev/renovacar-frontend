@@ -1,7 +1,7 @@
 "use client";
 
-import { clientesApi } from "@/lib/api";
 import { useEffect, useState, useMemo } from "react";
+import { useClientesStore, type Cliente } from "@/stores/useClientesStore"; // ajusta la ruta
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { Label } from "../ui/label";
@@ -23,11 +23,9 @@ import {
   Plus,
   Pencil,
   Trash2,
-  Mail,
   X,
 } from "lucide-react";
 import { formatDate } from "date-fns";
-import { Cliente } from "@/types/types";
 
 type ClienteForm = {
   nombre: string;
@@ -46,7 +44,7 @@ const formVacio: ClienteForm = {
 };
 
 // ======================
-// CARD (botón)
+// CARD
 // ======================
 interface CardProps {
   data: Cliente;
@@ -82,22 +80,25 @@ const ClientCard = ({ data, onClick }: CardProps) => {
       </div>
 
       <div className="flex flex-col gap-2.5 text-sm">
-        <div className="flex items-center gap-2.5 text-white/70">
+        <div className="flex items-center gap-2.5 bg-white/70">
           <IdCard size={15} className="shrink-0 text-white/40" />
           <span className="truncate">{dniRuc || "Sin documento"}</span>
         </div>
-
         <div className="flex items-center gap-2.5 text-white/70">
           <Phone size={15} className="shrink-0 text-white/40" />
           <span className="truncate">
             {whatsapp || telefono || "Sin teléfono"}
           </span>
         </div>
-
         <div className="flex items-center gap-2.5 text-white/70">
           <Calendar size={15} className="shrink-0 text-white/40" />
           <span className="truncate">
-            {creadoEn ? formatDate(new Date(creadoEn), "dd MMM yyyy") : "—"}
+            {creadoEn
+              ? formatDate(
+                  creadoEn instanceof Date ? creadoEn : new Date(creadoEn),
+                  "dd MMM yyyy",
+                )
+              : "—"}
           </span>
         </div>
       </div>
@@ -111,48 +112,34 @@ const ClientCard = ({ data, onClick }: CardProps) => {
 // DASHBOARD
 // ======================
 export default function ClientsDashboard() {
+  const {
+    clientes,
+    loading,
+    error: storeError,
+    create,
+    update,
+    remove,
+  } = useClientesStore();
+
   const [search, setSearch] = useState("");
-  const [data, setData] = useState<Cliente[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // Modal detalle / editar
   const [openDetail, setOpenDetail] = useState(false);
   const [seleccionado, setSeleccionado] = useState<Cliente | null>(null);
   const [modoEdicion, setModoEdicion] = useState(false);
   const [form, setForm] = useState<ClienteForm>(formVacio);
   const [formError, setFormError] = useState("");
 
-  // Modal crear
   const [openCreate, setOpenCreate] = useState(false);
   const [createForm, setCreateForm] = useState<ClienteForm>(formVacio);
   const [createError, setCreateError] = useState("");
 
-  // Modal eliminar
   const [openDelete, setOpenDelete] = useState(false);
 
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      setError("");
-      const res = await clientesApi.getAll();
-      setData(res);
-    } catch (err: any) {
-      setError(err?.response?.data?.message || "Error al cargar clientes");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadData();
-  }, []);
-
   const dataFiltrada = useMemo(() => {
-    if (!search.trim()) return data;
+    if (!search.trim()) return clientes;
     const term = search.toLowerCase().trim();
-    return data.filter((c) => {
+    return clientes.filter((c) => {
       return (
         c.nombre?.toLowerCase().includes(term) ||
         c.dniRuc?.toLowerCase().includes(term) ||
@@ -161,9 +148,19 @@ export default function ClientsDashboard() {
         c.correo?.toLowerCase().includes(term)
       );
     });
-  }, [data, search]);
+  }, [clientes, search]);
 
-  // ----- Abrir detalle -----
+  const hayCambios = useMemo(() => {
+    if (!seleccionado) return false;
+    return (
+      form.nombre.trim() !== (seleccionado.nombre || "") ||
+      form.dniRuc.trim() !== (seleccionado.dniRuc || "") ||
+      form.telefono.trim() !== (seleccionado.telefono || "") ||
+      form.whatsapp.trim() !== (seleccionado.whatsapp || "") ||
+      form.correo.trim() !== (seleccionado.correo || "")
+    );
+  }, [form, seleccionado]);
+
   const abrirDetalle = (cliente: Cliente) => {
     setSeleccionado(cliente);
     setForm({
@@ -178,13 +175,11 @@ export default function ClientsDashboard() {
     setOpenDetail(true);
   };
 
-  // ----- Activar edición -----
   const activarEdicion = () => {
     setModoEdicion(true);
     setFormError("");
   };
 
-  // ----- Cancelar edición -----
   const cancelarEdicion = () => {
     if (!seleccionado) return;
     setForm({
@@ -198,7 +193,6 @@ export default function ClientsDashboard() {
     setFormError("");
   };
 
-  // ----- Guardar edición -----
   const guardarEdicion = async () => {
     if (!seleccionado) return;
     if (!hayCambios) {
@@ -213,28 +207,23 @@ export default function ClientsDashboard() {
     try {
       setSaving(true);
       setFormError("");
-
-      const actualizado = await clientesApi.update(seleccionado.id, {
+      const actualizado = await update(seleccionado.id, {
         nombre: form.nombre.trim(),
         dniRuc: form.dniRuc.trim() || undefined,
         telefono: form.telefono.trim() || undefined,
         whatsapp: form.whatsapp.trim() || undefined,
         correo: form.correo.trim() || undefined,
       });
-
       setSeleccionado(actualizado);
       setModoEdicion(false);
-      await loadData();
+      // onSnapshot actualiza la lista solo
     } catch (err: any) {
-      setFormError(
-        err?.response?.data?.message || "Error al guardar los cambios",
-      );
+      setFormError(err?.message || "Error al guardar los cambios");
     } finally {
       setSaving(false);
     }
   };
 
-  // ----- Crear -----
   const abrirCrear = () => {
     setCreateForm(formVacio);
     setCreateError("");
@@ -250,59 +239,38 @@ export default function ClientsDashboard() {
     try {
       setSaving(true);
       setCreateError("");
-
-      await clientesApi.create({
+      await create({
         nombre: createForm.nombre.trim(),
         dniRuc: createForm.dniRuc.trim() || undefined,
         telefono: createForm.telefono.trim() || undefined,
         whatsapp: createForm.whatsapp.trim() || undefined,
         correo: createForm.correo.trim() || undefined,
       });
-
       setOpenCreate(false);
-      await loadData();
     } catch (err: any) {
-      setCreateError(
-        err?.response?.data?.message || "Error al crear el cliente",
-      );
+      setCreateError(err?.message || "Error al crear el cliente");
     } finally {
       setSaving(false);
     }
   };
 
-  // ----- Eliminar -----
   const eliminar = async () => {
     if (!seleccionado) return;
-
     try {
       setSaving(true);
-      await clientesApi.remove(seleccionado.id);
+      await remove(seleccionado.id);
       setOpenDelete(false);
       setOpenDetail(false);
       setSeleccionado(null);
-      await loadData();
     } catch (err: any) {
-      setFormError(
-        err?.response?.data?.message || "No se pudo eliminar el cliente",
-      );
+      setFormError(err?.message || "No se pudo eliminar el cliente");
       setOpenDelete(false);
     } finally {
       setSaving(false);
     }
   };
 
-  //Solo modificar si hay cambios
-  const hayCambios = useMemo(() => {
-    if (!seleccionado) return false;
-
-    return (
-      form.nombre.trim() !== (seleccionado.nombre || "") ||
-      form.dniRuc.trim() !== (seleccionado.dniRuc || "") ||
-      form.telefono.trim() !== (seleccionado.telefono || "") ||
-      form.whatsapp.trim() !== (seleccionado.whatsapp || "") ||
-      form.correo.trim() !== (seleccionado.correo || "")
-    );
-  }, [form, seleccionado]);
+  const error = storeError || "";
 
   return (
     <div className="flex-1 w-full flex flex-col gap-6 p-6">
@@ -317,7 +285,7 @@ export default function ClientsDashboard() {
             <p className="text-sm text-white/50">
               {loading
                 ? "Cargando..."
-                : `${dataFiltrada.length} de ${data.length} clientes`}
+                : `${dataFiltrada.length} de ${clientes.length} clientes`}
             </p>
           </div>
         </div>
@@ -336,7 +304,6 @@ export default function ClientsDashboard() {
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-
           <Button
             onClick={abrirCrear}
             className="bg-emerald-600 hover:bg-emerald-500 shrink-0"
@@ -373,7 +340,7 @@ export default function ClientsDashboard() {
                 <Button
                   onClick={abrirCrear}
                   variant="outline"
-                  className="border-white/10 text-white/70"
+                  className="border-white/10 "
                 >
                   <Plus size={14} className="mr-1.5" />
                   Crear primer cliente
@@ -394,9 +361,7 @@ export default function ClientsDashboard() {
         )}
       </div>
 
-      {/* ====================== */}
       {/* MODAL DETALLE / EDITAR */}
-      {/* ====================== */}
       <Dialog
         open={openDetail}
         onOpenChange={(open) => {
@@ -430,7 +395,6 @@ export default function ClientsDashboard() {
                 className="bg-white/5 border-white/10 disabled:opacity-60"
               />
             </div>
-
             <div className="space-y-2">
               <Label>DNI / RUC / C.E.</Label>
               <Input
@@ -442,7 +406,6 @@ export default function ClientsDashboard() {
                 className="bg-white/5 border-white/10 disabled:opacity-60"
               />
             </div>
-
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>Teléfono</Label>
@@ -467,7 +430,6 @@ export default function ClientsDashboard() {
                 />
               </div>
             </div>
-
             <div className="space-y-2">
               <Label>Correo</Label>
               <Input
@@ -484,7 +446,9 @@ export default function ClientsDashboard() {
               <p className="text-xs text-white/40">
                 Registrado el{" "}
                 {formatDate(
-                  new Date(seleccionado.creadoEn),
+                  seleccionado.creadoEn instanceof Date
+                    ? seleccionado.creadoEn
+                    : new Date(seleccionado.creadoEn),
                   "dd MMM yyyy HH:mm",
                 )}
               </p>
@@ -500,7 +464,7 @@ export default function ClientsDashboard() {
                   variant="outline"
                   onClick={cancelarEdicion}
                   disabled={saving}
-                  className="border-white/10 text-white/70"
+                  className="border-white/10 "
                 >
                   <X size={14} className="mr-1.5" />
                   Cancelar
@@ -508,7 +472,7 @@ export default function ClientsDashboard() {
                 <Button
                   onClick={guardarEdicion}
                   disabled={saving || !hayCambios}
-                  className="bg-emerald-600 hover:bg-emerald-500"
+                  className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40"
                 >
                   {saving ? "Guardando..." : "Guardar cambios"}
                 </Button>
@@ -536,9 +500,7 @@ export default function ClientsDashboard() {
         </DialogContent>
       </Dialog>
 
-      {/* ====================== */}
-      {/* MODAL CREAR            */}
-      {/* ====================== */}
+      {/* MODAL CREAR */}
       <Dialog open={openCreate} onOpenChange={setOpenCreate}>
         <DialogContent className="bg-zinc-900 border-white/10 text-white sm:max-w-md">
           <DialogHeader>
@@ -562,7 +524,6 @@ export default function ClientsDashboard() {
                 className="bg-white/5 border-white/10"
               />
             </div>
-
             <div className="space-y-2">
               <Label>DNI / RUC / C.E.</Label>
               <Input
@@ -574,7 +535,6 @@ export default function ClientsDashboard() {
                 className="bg-white/5 border-white/10"
               />
             </div>
-
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>Teléfono</Label>
@@ -599,7 +559,6 @@ export default function ClientsDashboard() {
                 />
               </div>
             </div>
-
             <div className="space-y-2">
               <Label>Correo</Label>
               <Input
@@ -612,7 +571,6 @@ export default function ClientsDashboard() {
                 className="bg-white/5 border-white/10"
               />
             </div>
-
             {createError && (
               <p className="text-sm text-rose-400">{createError}</p>
             )}
@@ -623,7 +581,7 @@ export default function ClientsDashboard() {
               variant="outline"
               onClick={() => setOpenCreate(false)}
               disabled={saving}
-              className="border-white/10 text-white/70"
+              className="border-white/10 "
             >
               Cancelar
             </Button>
@@ -638,9 +596,7 @@ export default function ClientsDashboard() {
         </DialogContent>
       </Dialog>
 
-      {/* ====================== */}
-      {/* MODAL ELIMINAR         */}
-      {/* ====================== */}
+      {/* MODAL ELIMINAR */}
       <Dialog open={openDelete} onOpenChange={setOpenDelete}>
         <DialogContent className="bg-zinc-900 border-white/10 text-white sm:max-w-sm">
           <DialogHeader>
@@ -653,13 +609,12 @@ export default function ClientsDashboard() {
               ? Esta acción no se puede deshacer.
             </DialogDescription>
           </DialogHeader>
-
           <DialogFooter>
             <Button
               variant="outline"
               onClick={() => setOpenDelete(false)}
               disabled={saving}
-              className="border-white/10 text-white/70"
+              className="border-white/10 "
             >
               Cancelar
             </Button>
