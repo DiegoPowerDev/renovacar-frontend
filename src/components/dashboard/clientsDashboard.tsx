@@ -80,7 +80,7 @@ const ClientCard = ({ data, onClick }: CardProps) => {
       </div>
 
       <div className="flex flex-col gap-2.5 text-sm">
-        <div className="flex items-center gap-2.5 bg-white/70">
+        <div className="flex items-center gap-2.5 ">
           <IdCard size={15} className="shrink-0 text-white/40" />
           <span className="truncate">{dniRuc || "Sin documento"}</span>
         </div>

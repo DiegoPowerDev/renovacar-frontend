@@ -1,4 +1,4 @@
-// src/stores/useOrdenesStore.ts
+const { increment } = await import("firebase/firestore");
 import { create } from "zustand";
 import {
   collection,
@@ -39,6 +39,42 @@ export type MetodoPago =
   | "TRANSFERENCIA"
   | "TARJETA"
   | "OTRO";
+
+export type ItemCotizacion = {
+  id: string;
+  nombre: string;
+  descripcion?: string | null;
+  cantidad: number;
+  precioUnitario: number;
+  descuento: number;
+  subtotal: number;
+  servicioCatalogoId?: string | null;
+  creadoEn?: Date | null;
+};
+
+export type AgregarItemInput = {
+  numeroOT: string;
+  nombre: string;
+  descripcion?: string;
+  cantidad?: number;
+  precioUnitario: number;
+  descuento?: number;
+  servicioCatalogoId?: string;
+};
+
+export type CotizacionResumen = {
+  numero: string;
+  estado: string;
+  estadoCotizacion: string;
+  subtotal: number;
+  descuentoTotal: number;
+  total: number;
+  totalPagado: number;
+  saldoPendiente: number;
+  items: ItemCotizacion[];
+  placa: string;
+  clienteNombre: string;
+};
 
 export type Pago = {
   id: string;
@@ -278,6 +314,17 @@ type OrdenesState = {
     responsable: string,
   ) => Promise<EtapaProduccion>;
   dashboardProduccion: () => Promise<Record<string, any[]>>;
+  listarItems: (numeroOT: string) => Promise<ItemCotizacion[]>;
+  obtenerCotizacion: (numeroOT: string) => Promise<CotizacionResumen>;
+  agregarItem: (data: AgregarItemInput) => Promise<CotizacionResumen>;
+  eliminarItem: (
+    numeroOT: string,
+    itemId: string,
+  ) => Promise<CotizacionResumen>;
+  cambiarEstadoCotizacion: (
+    numeroOT: string,
+    estado: "BORRADOR" | "ENVIADA" | "ACEPTADA" | "RECHAZADA",
+  ) => Promise<OrdenTrabajo>;
 };
 
 const COL = "ordenes";
@@ -498,6 +545,53 @@ async function getEtapaRef(ordenId: string, etapaId: string) {
     ref,
     etapa: mapEtapa(snap.id, snap.data() as Record<string, unknown>),
   };
+}
+
+function mapItem(id: string, data: Record<string, unknown>): ItemCotizacion {
+  return {
+    id,
+    nombre: (data.nombre as string) || "",
+    descripcion: (data.descripcion as string) || null,
+    cantidad: Number(data.cantidad) || 1,
+    precioUnitario: Number(data.precioUnitario) || 0,
+    descuento: Number(data.descuento) || 0,
+    subtotal: Number(data.subtotal) || 0,
+    servicioCatalogoId: (data.servicioCatalogoId as string) || null,
+    creadoEn: toDate(data.creadoEn),
+  };
+}
+
+async function listItems(ordenId: string): Promise<ItemCotizacion[]> {
+  const snap = await getDocs(
+    query(collection(db, COL, ordenId, "items"), orderBy("creadoEn", "asc")),
+  );
+  return snap.docs.map((d) =>
+    mapItem(d.id, d.data() as Record<string, unknown>),
+  );
+}
+
+async function recalcularTotalesDesdeItems(
+  ordenId: string,
+  totalPagadoActual: number,
+) {
+  const items = await listItems(ordenId);
+  const subtotal = items.reduce(
+    (acc, it) => acc + it.cantidad * it.precioUnitario,
+    0,
+  );
+  const descuentoTotal = items.reduce((acc, it) => acc + it.descuento, 0);
+  const total = Math.max(subtotal - descuentoTotal, 0);
+  const saldoPendiente = Math.max(total - totalPagadoActual, 0);
+
+  await updateDoc(doc(db, COL, ordenId), {
+    subtotal,
+    descuentoTotal,
+    total,
+    saldoPendiente,
+    actualizadoEn: serverTimestamp(),
+  });
+
+  return { items, subtotal, descuentoTotal, total, saldoPendiente };
 }
 
 // ======================
@@ -995,5 +1089,136 @@ export const useOrdenesStore = create<OrdenesState>((set, get) => ({
     }
 
     return resumen;
+  },
+  listarItems: async (numeroOT) => {
+    const orden = await get().findByNumero(numeroOT);
+    if (!orden) throw new Error(`Orden ${numeroOT} no encontrada`);
+    return listItems(orden.id);
+  },
+
+  obtenerCotizacion: async (numeroOT) => {
+    const orden = await get().findByNumero(numeroOT);
+    if (!orden) throw new Error(`Orden ${numeroOT} no encontrada`);
+
+    const items = await listItems(orden.id);
+
+    return {
+      numero: orden.numero,
+      estado: orden.estado,
+      estadoCotizacion: orden.estadoCotizacion,
+      subtotal: orden.subtotal,
+      descuentoTotal: orden.descuentoTotal,
+      total: orden.total,
+      totalPagado: orden.totalPagado,
+      saldoPendiente: orden.saldoPendiente,
+      items,
+      placa: orden.placa,
+      clienteNombre: orden.clienteNombre || "",
+    };
+  },
+
+  agregarItem: async (data) => {
+    const orden = await get().findByNumero(data.numeroOT);
+    if (!orden) throw new Error(`Orden ${data.numeroOT} no encontrada`);
+
+    if (orden.estadoCotizacion === "ACEPTADA") {
+      // si quieres permitir editar siempre, quita este bloque
+      // throw new Error("No se puede modificar una cotización ya aceptada");
+    }
+
+    const cantidad = data.cantidad ?? 1;
+    const descuento = data.descuento ?? 0;
+    const precioUnitario = data.precioUnitario;
+
+    if (precioUnitario < 0) {
+      throw new Error("El precio unitario no puede ser negativo");
+    }
+
+    const subtotalLinea = cantidad * precioUnitario - descuento;
+    if (subtotalLinea < 0) {
+      throw new Error("El subtotal del ítem no puede ser negativo");
+    }
+
+    if (!data.nombre?.trim()) {
+      throw new Error("El nombre del ítem es obligatorio");
+    }
+
+    await addDoc(collection(db, COL, orden.id, "items"), {
+      nombre: data.nombre.trim(),
+      descripcion: data.descripcion?.trim() || null,
+      cantidad,
+      precioUnitario,
+      descuento,
+      subtotal: subtotalLinea,
+      servicioCatalogoId: data.servicioCatalogoId || null,
+      creadoEn: Timestamp.now(),
+    });
+
+    // Si el ítem viene del catálogo, opcional: incrementar usos
+    if (data.servicioCatalogoId) {
+      try {
+        const catRef = doc(db, "catalogo", data.servicioCatalogoId);
+        await updateDoc(catRef, { usos: increment(1) });
+      } catch {
+        // no bloqueante
+      }
+    }
+
+    await recalcularTotalesDesdeItems(orden.id, orden.totalPagado);
+
+    // Si estaba en BORRADOR, pasar a COTIZADA
+    if (orden.estado === "BORRADOR") {
+      await updateDoc(doc(db, COL, orden.id), {
+        estado: "COTIZADA",
+        estadoCotizacion: "BORRADOR",
+        actualizadoEn: serverTimestamp(),
+      });
+    }
+
+    return get().obtenerCotizacion(data.numeroOT);
+  },
+
+  eliminarItem: async (numeroOT, itemId) => {
+    const orden = await get().findByNumero(numeroOT);
+    if (!orden) throw new Error(`Orden ${numeroOT} no encontrada`);
+
+    const itemRef = doc(db, COL, orden.id, "items", itemId);
+    const itemSnap = await getDoc(itemRef);
+    if (!itemSnap.exists()) {
+      throw new Error("Ítem no encontrado");
+    }
+
+    await deleteDoc(itemRef);
+    await recalcularTotalesDesdeItems(orden.id, orden.totalPagado);
+
+    return get().obtenerCotizacion(numeroOT);
+  },
+
+  cambiarEstadoCotizacion: async (numeroOT, nuevoEstado) => {
+    const validos = ["BORRADOR", "ENVIADA", "ACEPTADA", "RECHAZADA"] as const;
+    if (!validos.includes(nuevoEstado)) {
+      throw new Error(`Estado de cotización inválido: ${nuevoEstado}`);
+    }
+
+    const orden = await get().findByNumero(numeroOT);
+    if (!orden) throw new Error(`Orden ${numeroOT} no encontrada`);
+
+    let nuevoEstadoOT = orden.estado;
+    if (nuevoEstado === "ACEPTADA" && orden.estado === "COTIZADA") {
+      nuevoEstadoOT = "EN_PROCESO";
+    }
+    if (nuevoEstado === "RECHAZADA") {
+      nuevoEstadoOT = "CANCELADA";
+    }
+
+    await updateDoc(doc(db, COL, orden.id), {
+      estadoCotizacion: nuevoEstado,
+      estado: nuevoEstadoOT,
+      actualizadoEn: serverTimestamp(),
+    });
+
+    const actualizada = await get().findByNumero(numeroOT);
+    if (!actualizada) throw new Error(`Orden ${numeroOT} no encontrada`);
+    return actualizada;
   },
 }));

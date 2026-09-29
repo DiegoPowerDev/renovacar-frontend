@@ -368,7 +368,7 @@ export default function MainDashboard() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="h-56">
+                <div className="h-56 ">
                   {pieData.length === 0 ? (
                     <div className="flex items-center justify-center h-full text-white/40 text-sm">
                       Sin datos
@@ -378,26 +378,27 @@ export default function MainDashboard() {
                       <BarChart data={pieData}>
                         <CartesianGrid
                           strokeDasharray="3 3"
-                          stroke="#ffffff10"
+                          stroke="#fafafa20"
                         />
                         <XAxis
                           dataKey="name"
-                          tick={{ fill: "#ffffff60", fontSize: 11 }}
-                          axisLine={false}
+                          tick={{ fill: "white", fontSize: 11 }}
                         />
                         <YAxis
-                          tick={{ fill: "#ffffff60", fontSize: 11 }}
-                          axisLine={false}
+                          tick={{ fill: "white", fontSize: 11 }}
                           allowDecimals={false}
                         />
                         <Tooltip
+                          cursor={{ fill: "#82181a30" }}
                           contentStyle={{
-                            background: "#1a1a1a",
+                            fontSize: "14px",
+                            background: "black",
+                            color: "white",
                             border: "1px solid #333",
                             borderRadius: 8,
                           }}
                         />
-                        <Bar dataKey="value" radius={[6, 6, 0, 0]}>
+                        <Bar fill="white" dataKey="value" radius={[6, 6, 0, 0]}>
                           {pieData.map((entry, i) => (
                             <Cell key={i} fill={entry.color} />
                           ))}
@@ -517,32 +518,35 @@ export default function MainDashboard() {
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full text-sm table-fixed">
                   <thead>
                     <tr className="text-left text-white/40 border-b border-white/10">
-                      <th className="pb-3 font-medium">OT</th>
-                      <th className="pb-3 font-medium">Placa</th>
-                      <th className="pb-3 font-medium">Cliente</th>
-                      <th className="pb-3 font-medium">Estado</th>
-                      <th className="pb-3 font-medium text-right">Total</th>
-                      <th className="pb-3 font-medium text-right">Saldo</th>
-                      <th className="pb-3 font-medium">Fecha</th>
+                      {/* Las 7 columnas exactas con el ancho arbitrario válido */}
+                      <th className="pb-3 font-medium w-[100px]!">OT</th>
+                      <th className="pb-3 font-medium w-[100px]!">Placa</th>
+                      <th className="pb-3 font-medium w-[100px]!">Cliente</th>
+                      <th className="pb-3 font-medium w-[100px]!">Estado</th>
+                      <th className="pb-3 font-medium  w-[100px]!">Total</th>
+                      <th className="pb-3 font-medium  w-[100px]!">Saldo</th>
+                      <th className="pb-3 font-medium  w-[100px]!">Fecha</th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody className="divide-y divide-white/5">
                     {data.ultimasOrdenes.map((ot) => (
                       <tr
                         key={ot.numero}
                         className="border-b border-white/5 hover:bg-white/5 transition-colors"
                       >
-                        <td className="py-3 font-medium text-emerald-400">
+                        <td className="py-3 font-medium text-emerald-400 truncate">
                           {ot.numero}
                         </td>
-                        <td className="py-3 text-white">{ot.placa}</td>
-                        <td className="py-3 text-white/70">{ot.cliente}</td>
-                        <td className="py-3">
+                        <td className="py-3 text-white truncate">{ot.placa}</td>
+                        <td className="py-3 text-white/70 truncate">
+                          {ot.cliente}
+                        </td>
+                        <td className="py-3 truncate">
                           <span
-                            className="text-xs px-2 py-1 rounded-md"
+                            className="text-xs px-2 py-1 rounded-md inline-block"
                             style={{
                               backgroundColor: `${COLORES_ESTADO[ot.estado] || "#94a3b8"}20`,
                               color: COLORES_ESTADO[ot.estado] || "#94a3b8",
@@ -551,10 +555,10 @@ export default function MainDashboard() {
                             {ot.estado}
                           </span>
                         </td>
-                        <td className="py-3 text-right text-white">
+                        <td className="py-3  text-white truncate">
                           {formatoSoles(ot.total)}
                         </td>
-                        <td className="py-3 text-right">
+                        <td className="py-3  truncate">
                           <span
                             className={
                               ot.saldoPendiente > 0
@@ -565,7 +569,7 @@ export default function MainDashboard() {
                             {formatoSoles(ot.saldoPendiente)}
                           </span>
                         </td>
-                        <td className="py-3 text-white/50">
+                        <td className="py-3  text-white/50 truncate">
                           {formatDate(
                             new Date(ot.fecha || Date.now()),
                             "dd/MM/yyyy",

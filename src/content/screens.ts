@@ -6,6 +6,7 @@ import VehiclesDashboard from "@/components/dashboard/vehiclesDashboard";
 import {
   BookOpenText,
   BookUser,
+  BriefcaseBusiness,
   CarFront,
   Home,
   LucideIcon,
@@ -14,6 +15,7 @@ import {
   UserSearch,
 } from "lucide-react";
 import MainDashboard from "@/components/dashboard/mainDashboard";
+import OrdenesDashboard from "@/components/dashboard/ordenesDashboard";
 
 interface Screens {
   title: string;
@@ -29,7 +31,12 @@ export const screens: Screens[] = [
     enable: true,
     component: MainDashboard,
   },
-
+  {
+    title: "Ordenes",
+    icon: BriefcaseBusiness,
+    enable: true,
+    component: OrdenesDashboard,
+  },
   {
     title: "Clientes",
     icon: UserSearch,

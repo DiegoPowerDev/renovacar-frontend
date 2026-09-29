@@ -439,7 +439,7 @@ export default function VehiclessDashboard() {
                 <Button
                   onClick={abrirCrear}
                   variant="outline"
-                  className="border-white/10 text-white/70"
+                  className="border-white/10 "
                 >
                   <Plus size={14} className="mr-1.5" />
                   Registrar primer vehículo
