@@ -196,7 +196,15 @@ export default function OrdenesDashboard() {
   } = useOrdenesStore();
   const { vehiculos } = useVehiculosStore();
   const { servicios } = useCatalogoStore();
+
+  //PERMISOS
   const can = useAuthStore((s) => s.can);
+  const canOrdenes = can("ordenes.write");
+  const canCotiz = can("cotizacion.write");
+  const canPagos = can("pagos.write");
+  const canProd = can("produccion.write");
+  const canCalidad = can("calidad.write");
+  const canEntrega = can("entrega.write");
 
   const [search, setSearch] = useState("");
   const [filtroEstado, setFiltroEstado] = useState<string>("TODOS");
@@ -262,6 +270,7 @@ export default function OrdenesDashboard() {
   const [tab, setTab] = useState("resumen");
   const [cotizacion, setCotizacion] = useState<CotizacionResumen | null>(null);
   const [loadingCot, setLoadingCot] = useState(false);
+
   const [itemNombre, setItemNombre] = useState("");
   const [itemDesc, setItemDesc] = useState("");
   const [itemCant, setItemCant] = useState("1");
@@ -385,7 +394,7 @@ export default function OrdenesDashboard() {
   }, [vehiculos, busquedaPlaca]);
 
   const guardarEstado = async () => {
-    if (!seleccionada) return;
+    if (!seleccionada || !canOrdenes) return;
     if (estadoEdit === seleccionada.estado) {
       setOpenDetail(false);
       return;
@@ -403,6 +412,7 @@ export default function OrdenesDashboard() {
   };
 
   const abrirCrear = () => {
+    if (!canOrdenes) return;
     setPlacaCreate("");
     setBusquedaPlaca("");
     setObsCreate("");
@@ -757,7 +767,7 @@ export default function OrdenesDashboard() {
                   ? "No hay órdenes con ese filtro"
                   : "No hay órdenes registradas"}
               </p>
-              {!search && filtroEstado === "TODOS" && (
+              {!search && filtroEstado === "TODOS" && canOrdenes && (
                 <Button
                   onClick={abrirCrear}
                   variant="outline"
@@ -789,884 +799,1019 @@ export default function OrdenesDashboard() {
           </DialogHeader>
 
           {seleccionada && (
-            <Tabs value={tab} onValueChange={setTab} className="w-full">
-              <TabsList className="grid w-full grid-cols-5 ">
-                <TabsTrigger value="resumen">Resumen</TabsTrigger>
-                <TabsTrigger value="cotizacion">Cotización</TabsTrigger>
-                {can("pagos.write") && (
-                  <TabsTrigger value="pagos">Pagos</TabsTrigger>
-                )}
-                <TabsTrigger value="produccion">Producción</TabsTrigger>
-                <TabsTrigger value="entrega">QC / Entrega</TabsTrigger>
-              </TabsList>
+            <>
+              {() => {
+                const tabs = [
+                  { value: "resumen", label: "Resumen", show: true },
+                  { value: "cotizacion", label: "Cotiz.", show: true }, // todos ven; escritura aparte
+                  { value: "pagos", label: "Pagos", show: canPagos },
+                  { value: "produccion", label: "Prod.", show: true },
+                  {
+                    value: "entrega",
+                    label: "QC / Entrega",
+                    show: canCalidad || canEntrega || true, // true = todos ven estado; o solo canCalidad || canEntrega
+                  },
+                ].filter((t) => t.show);
 
-              {/* ===== RESUMEN ===== */}
-              <TabsContent
-                value="resumen"
-                className="flex flex-col gap-4 mt-4 text-sm"
-              >
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <p className="text-xs text-white/40 mb-1">Vehículo</p>
-                    <p className="text-white">
-                      {[seleccionada.marca, seleccionada.modelo]
-                        .filter(Boolean)
-                        .join(" ") || "—"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-white/40 mb-1">Ingreso</p>
-                    <p className="text-white">
-                      {fmtDate(seleccionada.fechaIngreso, "dd/MM/yyyy HH:mm")}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-2 rounded-xl bg-white/5 p-3">
-                  <div>
-                    <p className="text-[10px] text-white/40">Total</p>
-                    <p className="font-medium text-white">
-                      {formatoSoles(seleccionada.total)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-white/40">Pagado</p>
-                    <p className="font-medium text-emerald-400">
-                      {formatoSoles(seleccionada.totalPagado)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-white/40">Saldo</p>
-                    <p
-                      className={`font-medium ${
-                        seleccionada.saldoPendiente > 0
-                          ? "text-rose-400"
-                          : "text-white/50"
-                      }`}
+                return (
+                  <Tabs value={tab} onValueChange={setTab} className="w-full">
+                    <TabsList
+                      className="grid w-full bg-white/5"
+                      style={{
+                        gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))`,
+                      }}
                     >
-                      {formatoSoles(seleccionada.saldoPendiente)}
-                    </p>
-                  </div>
-                </div>
-
-                {seleccionada.observaciones && (
-                  <div>
-                    <p className="text-xs text-white/40 mb-1">Observaciones</p>
-                    <p className="text-white/80">
-                      {seleccionada.observaciones}
-                    </p>
-                  </div>
-                )}
-
-                <div className="space-y-2">
-                  <Label>Estado OT</Label>
-                  <Select
-                    value={estadoEdit}
-                    onValueChange={(v) => setEstadoEdit(v as EstadoOT)}
-                  >
-                    <SelectTrigger className="bg-white/5 border-white/10">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {ESTADOS.map((e) => (
-                        <SelectItem key={e} value={e}>
-                          {e}
-                        </SelectItem>
+                      {tabs.map((t) => (
+                        <TabsTrigger key={t.value} value={t.value}>
+                          {t.label}
+                        </TabsTrigger>
                       ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                    </TabsList>
 
-                {detailError && (
-                  <p className="text-sm text-rose-400">{detailError}</p>
-                )}
-
-                <div className="flex justify-end gap-2 pt-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => setOpenDetail(false)}
-                    className="border-white/10 "
-                  >
-                    Cerrar
-                  </Button>
-                  <Button
-                    onClick={guardarEstado}
-                    disabled={saving || estadoEdit === seleccionada.estado}
-                    className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40"
-                  >
-                    {saving ? "Guardando..." : "Actualizar estado"}
-                  </Button>
-                </div>
-              </TabsContent>
-
-              {/* ===== COTIZACIÓN ===== */}
-              <TabsContent
-                value="cotizacion"
-                className="flex flex-col gap-4 mt-4"
-              >
-                {loadingCot ? (
-                  <p className="text-sm text-white/50 text-center py-6">
-                    Cargando ítems...
-                  </p>
-                ) : (
-                  <>
-                    {/* Lista de ítems */}
-                    <div className="space-y-2 max-h-48 overflow-y-auto">
-                      {!cotizacion?.items?.length ? (
-                        <p className="text-sm text-white/40 text-center py-4">
-                          Sin ítems. Agrega un servicio.
-                        </p>
-                      ) : (
-                        cotizacion.items.map((it: ItemCotizacion) => (
-                          <div
-                            key={it.id}
-                            className="flex items-start justify-between gap-2 rounded-xl border border-white/10 bg-white/5 p-3 text-sm"
-                          >
-                            <div className="min-w-0">
-                              <p className="font-medium text-white truncate">
-                                {it.nombre}
-                              </p>
-                              <p className="text-xs text-white/40">
-                                {it.cantidad} ×{" "}
-                                {formatoSoles(it.precioUnitario)}
-                                {it.descuento > 0
-                                  ? ` − desc. ${formatoSoles(it.descuento)}`
-                                  : ""}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-2 shrink-0">
-                              <span className="text-emerald-400 font-medium">
-                                {formatoSoles(it.subtotal)}
-                              </span>
-                              <Button
-                                type="button"
-                                size="icon"
-                                variant="ghost"
-                                className="h-8 w-8 text-rose-400 hover:bg-rose-500/10"
-                                disabled={saving}
-                                onClick={() => borrarItem(it.id)}
-                              >
-                                <Trash2 size={14} />
-                              </Button>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-
-                    {/* Totales cotización */}
-                    {cotizacion && (
-                      <div className="flex justify-between text-sm border-t border-white/10 pt-2">
-                        <span className="text-white/50">Total cotizado</span>
-                        <span className="font-semibold text-white">
-                          {formatoSoles(cotizacion.total)}
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Form agregar */}
-                    <div className="space-y-3 rounded-xl border border-white/10 p-3">
-                      <p className="text-xs font-medium text-emerald-400 uppercase tracking-wide">
-                        Agregar ítem
-                      </p>
-
-                      {servicios.length > 0 && (
-                        <div className="space-y-2">
-                          <Label className="text-xs">Desde catálogo</Label>
-                          <Select
-                            value={itemCatalogoId || "manual"}
-                            onValueChange={(v) => {
-                              if (v === "manual") {
-                                setItemCatalogoId("");
-                                return;
-                              }
-                              onPickCatalogo(v);
-                            }}
-                          >
-                            <SelectTrigger className="bg-white/5 border-white/10">
-                              <SelectValue placeholder="Elegir servicio..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="manual">Manual</SelectItem>
-                              {servicios.map((s) => (
-                                <SelectItem key={s.id} value={s}>
-                                  {s.nombre} — {formatoSoles(s.precioBase)}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      )}
-
-                      <div className="space-y-2">
-                        <Label className="text-xs">Nombre *</Label>
-                        <Input
-                          value={itemNombre}
-                          onChange={(e) => setItemNombre(e.target.value)}
-                          className="bg-white/5 border-white/10 h-9"
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-3 gap-2">
-                        <div className="space-y-1">
-                          <Label className="text-xs">Cant.</Label>
-                          <Input
-                            type="number"
-                            min="1"
-                            value={itemCant}
-                            onChange={(e) => setItemCant(e.target.value)}
-                            className="bg-white/5 border-white/10 h-9"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs">Precio</Label>
-                          <Input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={itemPrecio}
-                            onChange={(e) => setItemPrecio(e.target.value)}
-                            className="bg-white/5 border-white/10 h-9"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs">Desc.</Label>
-                          <Input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={itemDescmto}
-                            onChange={(e) => setItemDescmto(e.target.value)}
-                            className="bg-white/5 border-white/10 h-9"
-                          />
-                        </div>
-                      </div>
-
-                      {itemError && (
-                        <p className="text-xs text-rose-400">{itemError}</p>
-                      )}
-                      {can("cotizacion.write") ? (
-                        <Button
-                          type="button"
-                          onClick={guardarItem}
-                          disabled={saving}
-                          className="w-full bg-emerald-600 hover:bg-emerald-500 h-9"
-                        >
-                          <Plus size={14} className="mr-1.5" />
-                          {saving ? "Agregando..." : "Agregar a la OT"}
-                        </Button>
-                      ) : null}
-                    </div>
-                  </>
-                )}
-              </TabsContent>
-
-              {/*PAGOS*/}
-              <TabsContent value="pagos" className="flex flex-col gap-4 mt-4">
-                {loadingPagos ? (
-                  <p className="text-sm text-white/50 text-center py-6">
-                    Cargando pagos...
-                  </p>
-                ) : (
-                  <>
-                    {/* Resumen montos */}
-                    <div className="grid grid-cols-3 gap-2 rounded-xl bg-white/5 p-3 text-sm">
-                      <div>
-                        <p className="text-[10px] text-white/40">Total OT</p>
-                        <p className="font-medium text-white">
-                          {formatoSoles(
-                            resumenPagos?.total ?? seleccionada?.total ?? 0,
-                          )}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] text-white/40">Cobrado</p>
-                        <p className="font-medium text-emerald-400">
-                          {formatoSoles(
-                            resumenPagos?.totalPagado ??
-                              seleccionada?.totalPagado ??
-                              0,
-                          )}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] text-white/40">Saldo</p>
-                        <p
-                          className={`font-medium ${
-                            (resumenPagos?.saldoPendiente ??
-                              seleccionada?.saldoPendiente ??
-                              0) > 0
-                              ? "text-rose-400"
-                              : "text-white/50"
-                          }`}
-                        >
-                          {formatoSoles(
-                            resumenPagos?.saldoPendiente ??
-                              seleccionada?.saldoPendiente ??
-                              0,
-                          )}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Historial de pagos */}
-                    <div className="space-y-2 max-h-40 overflow-y-auto">
-                      {!resumenPagos?.pagos?.length ? (
-                        <p className="text-sm text-white/40 text-center py-4">
-                          Aún no hay pagos registrados
-                        </p>
-                      ) : (
-                        resumenPagos.pagos.map((p) => (
-                          <div
-                            key={p.id}
-                            className="flex items-start justify-between gap-2 rounded-xl border border-white/10 bg-white/5 p-3 text-sm"
-                          >
-                            <div className="min-w-0">
-                              <p className="font-medium text-white">
-                                {formatoSoles(p.monto)}
-                                <span className="ml-2 text-xs text-emerald-400/90 font-normal">
-                                  {p.metodo}
-                                </span>
-                              </p>
-                              <p className="text-xs text-white/40">
-                                {p.fecha
-                                  ? fmtDate(p.fecha, "dd/MM/yyyy HH:mm")
-                                  : "—"}
-                                {p.comprobante ? ` · ${p.comprobante}` : ""}
-                              </p>
-                              {p.observaciones && (
-                                <p className="text-xs text-white/50 mt-0.5 truncate">
-                                  {p.observaciones}
-                                </p>
-                              )}
-                            </div>
-                            <Button
-                              type="button"
-                              size="icon"
-                              variant="ghost"
-                              className="h-8 w-8 text-rose-400 hover:bg-rose-500/10 shrink-0"
-                              disabled={saving}
-                              onClick={() => borrarPago(p.id)}
-                            >
-                              <Trash2 size={14} />
-                            </Button>
-                          </div>
-                        ))
-                      )}
-                    </div>
-
-                    {/* Form registrar pago */}
-                    <div className="space-y-3 rounded-xl border border-white/10 p-3">
-                      <p className="text-xs font-medium text-emerald-400 uppercase tracking-wide">
-                        Registrar pago
-                      </p>
-
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="space-y-1">
-                          <Label className="text-xs">Monto (S/) *</Label>
-                          <Input
-                            type="number"
-                            min="0.01"
-                            step="0.01"
-                            value={pagoMonto}
-                            onChange={(e) => setPagoMonto(e.target.value)}
-                            placeholder="100.00"
-                            className="bg-white/5 border-white/10 h-9"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs">Método *</Label>
-                          <Select
-                            value={pagoMetodo}
-                            onValueChange={(value) => {
-                              if (value != null) setPagoMetodo(value);
-                            }}
-                          >
-                            <SelectTrigger className="bg-white/5 border-white/10 h-9">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {METODOS.map((m) => (
-                                <SelectItem key={m} value={m}>
-                                  {m}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-
-                      <div className="space-y-1">
-                        <Label className="text-xs">Comprobante</Label>
-                        <Input
-                          value={pagoComprobante}
-                          onChange={(e) => setPagoComprobante(e.target.value)}
-                          placeholder="OP-123 / Nro operación"
-                          className="bg-white/5 border-white/10 h-9"
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <Label className="text-xs">Observaciones</Label>
-                        <Input
-                          value={pagoObs}
-                          onChange={(e) => setPagoObs(e.target.value)}
-                          placeholder="Adelanto, saldo, etc."
-                          className="bg-white/5 border-white/10 h-9"
-                        />
-                      </div>
-
-                      {pagoError && (
-                        <p className="text-xs text-rose-400">{pagoError}</p>
-                      )}
-
-                      <Button
-                        type="button"
-                        onClick={guardarPago}
-                        disabled={saving}
-                        className="w-full bg-emerald-600 hover:bg-emerald-500 h-9"
-                      >
-                        <Plus size={14} className="mr-1.5" />
-                        {saving ? "Registrando..." : "Registrar pago"}
-                      </Button>
-                    </div>
-                  </>
-                )}
-              </TabsContent>
-
-              <TabsContent
-                value="produccion"
-                className="flex flex-col gap-4 mt-4"
-              >
-                {loadingEtapas ? (
-                  <p className="text-sm text-white/50 text-center py-6">
-                    Cargando etapas...
-                  </p>
-                ) : (
-                  <>
-                    {/* Sin etapas → generar plantilla */}
-                    {!resumenEtapas?.etapas?.length ? (
-                      <div className="space-y-3 rounded-xl border border-white/10 p-4">
-                        <p className="text-sm text-white/60">
-                          Esta OT aún no tiene etapas de producción.
-                        </p>
-                        <div className="space-y-2">
-                          <Label className="text-xs">Plantilla</Label>
-                          <Select
-                            value={tipoPlantilla}
-                            onValueChange={(value) => {
-                              if (value != null) setTipoPlantilla(value);
-                            }}
-                          >
-                            <SelectTrigger className="bg-white/5 border-white/10">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {PLANTILLAS_UI.map((p) => (
-                                <SelectItem key={p.value} value={p.value}>
-                                  {p.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <Button
-                          onClick={onGenerarEtapas}
-                          disabled={saving}
-                          className="w-full bg-emerald-600 hover:bg-emerald-500"
-                        >
-                          {saving ? "Generando..." : "Generar etapas"}
-                        </Button>
-                      </div>
-                    ) : (
-                      <>
-                        {/* Progreso */}
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-white/50">
-                            {
-                              resumenEtapas.etapas.filter(
-                                (e) => e.estado === "TERMINADO",
-                              ).length
-                            }{" "}
-                            / {resumenEtapas.etapas.length} terminadas
-                          </span>
-                          <span className="text-xs text-white/40">
-                            OT: {resumenEtapas.estadoOT}
-                          </span>
-                        </div>
-
-                        <div className="space-y-2 max-h-72 overflow-y-auto">
-                          {resumenEtapas.etapas.map((etapa) => {
-                            const color =
-                              COLOR_ETAPA[etapa.estado] || "#94a3b8";
-                            return (
-                              <div
-                                key={etapa.id}
-                                className="rounded-xl border border-white/10 bg-white/5 p-3 space-y-2"
-                              >
-                                <div className="flex items-start justify-between gap-2">
-                                  <div className="min-w-0">
-                                    <p className="text-sm font-medium text-white">
-                                      <span className="text-white/40 mr-1.5">
-                                        {etapa.secuencia}.
-                                      </span>
-                                      {etapa.nombre}
-                                    </p>
-                                    <p className="text-xs text-white/40 mt-0.5">
-                                      {etapa.responsable
-                                        ? `Resp: ${etapa.responsable}`
-                                        : "Sin responsable"}
-                                    </p>
-                                  </div>
-                                  <span
-                                    className="text-[10px] px-2 py-0.5 rounded-md shrink-0 font-medium"
-                                    style={{
-                                      backgroundColor: `${color}22`,
-                                      color,
-                                    }}
-                                  >
-                                    {etapa.estado}
-                                  </span>
-                                </div>
-
-                                {/* Responsable */}
-                                {etapa.estado !== "TERMINADO" && (
-                                  <div className="flex gap-2">
-                                    <Input
-                                      value={
-                                        responsableDraft[etapa.id] ??
-                                        etapa.responsable ??
-                                        ""
-                                      }
-                                      onChange={(e) =>
-                                        setResponsableDraft((d) => ({
-                                          ...d,
-                                          [etapa.id]: e.target.value,
-                                        }))
-                                      }
-                                      placeholder="Responsable"
-                                      className="bg-white/5 border-white/10 h-8 text-xs"
-                                    />
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      variant="outline"
-                                      className="h-8 border-white/10 text-white/70 shrink-0"
-                                      disabled={saving}
-                                      onClick={() => onAsignar(etapa)}
-                                    >
-                                      Asignar
-                                    </Button>
-                                  </div>
-                                )}
-
-                                {/* Acciones */}
-                                {etapa.estado !== "TERMINADO" && (
-                                  <div className="flex flex-wrap gap-2">
-                                    {(etapa.estado === "PENDIENTE" ||
-                                      etapa.estado === "PAUSADO") && (
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        className="h-8 bg-amber-600 hover:bg-amber-500"
-                                        disabled={saving}
-                                        onClick={() => onIniciar(etapa)}
-                                      >
-                                        Iniciar
-                                      </Button>
-                                    )}
-                                    {etapa.estado === "EN_PROCESO" && (
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="outline"
-                                        className="h-8 border-violet-500/30 text-violet-300"
-                                        disabled={saving}
-                                        onClick={() => onPausar(etapa)}
-                                      >
-                                        Pausar
-                                      </Button>
-                                    )}
-                                    {(etapa.estado === "EN_PROCESO" ||
-                                      etapa.estado === "PAUSADO" ||
-                                      etapa.estado === "PENDIENTE") && (
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        className="h-8 bg-emerald-600 hover:bg-emerald-500"
-                                        disabled={saving}
-                                        onClick={() => onTerminar(etapa)}
-                                      >
-                                        Terminar
-                                      </Button>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </>
-                    )}
-
-                    {prodError && (
-                      <p className="text-xs text-rose-400">{prodError}</p>
-                    )}
-                  </>
-                )}
-              </TabsContent>
-
-              <TabsContent value="entrega" className="flex flex-col gap-5 mt-4">
-                {loadingFinal ? (
-                  <p className="text-sm text-white/50 text-center py-6">
-                    Cargando...
-                  </p>
-                ) : (
-                  <>
-                    {/* Estado rápido */}
-                    {estadoFinal && (
-                      <div className="grid grid-cols-2 gap-2 rounded-xl bg-white/5 p-3 text-xs">
+                    {/* ===== RESUMEN ===== */}
+                    <TabsContent
+                      value="resumen"
+                      className="flex flex-col gap-4 mt-4 text-sm"
+                    >
+                      <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <p className="text-white/40">Estado OT</p>
-                          <p className="font-medium text-white">
-                            {estadoFinal.estado}
+                          <p className="text-xs text-white/40 mb-1">Vehículo</p>
+                          <p className="text-white">
+                            {[seleccionada.marca, seleccionada.modelo]
+                              .filter(Boolean)
+                              .join(" ") || "—"}
                           </p>
                         </div>
                         <div>
-                          <p className="text-white/40">Etapas</p>
+                          <p className="text-xs text-white/40 mb-1">Ingreso</p>
+                          <p className="text-white">
+                            {fmtDate(
+                              seleccionada.fechaIngreso,
+                              "dd/MM/yyyy HH:mm",
+                            )}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-2 rounded-xl bg-white/5 p-3">
+                        <div>
+                          <p className="text-[10px] text-white/40">Total</p>
                           <p className="font-medium text-white">
-                            {estadoFinal.etapasCompletadas}/
-                            {estadoFinal.totalEtapas}
+                            {formatoSoles(seleccionada.total)}
                           </p>
                         </div>
                         <div>
-                          <p className="text-white/40">Saldo</p>
+                          <p className="text-[10px] text-white/40">Pagado</p>
+                          <p className="font-medium text-emerald-400">
+                            {formatoSoles(seleccionada.totalPagado)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-white/40">Saldo</p>
                           <p
                             className={`font-medium ${
-                              estadoFinal.saldoPendiente > 0
+                              seleccionada.saldoPendiente > 0
                                 ? "text-rose-400"
-                                : "text-emerald-400"
+                                : "text-white/50"
                             }`}
                           >
-                            {formatoSoles(estadoFinal.saldoPendiente)}
+                            {formatoSoles(seleccionada.saldoPendiente)}
                           </p>
                         </div>
+                      </div>
+
+                      {seleccionada.observaciones && (
                         <div>
-                          <p className="text-white/40">QC</p>
-                          <p className="font-medium text-white">
-                            {estadoFinal.controlCalidad
-                              ? estadoFinal.controlCalidad.aprobado
-                                ? "Aprobado"
-                                : "Rechazado"
-                              : "Pendiente"}
+                          <p className="text-xs text-white/40 mb-1">
+                            Observaciones
+                          </p>
+                          <p className="text-white/80">
+                            {seleccionada.observaciones}
                           </p>
                         </div>
-                      </div>
-                    )}
-
-                    {/* ===== CONTROL DE CALIDAD ===== */}
-                    <div className="space-y-3 rounded-xl border border-white/10 p-3">
-                      <p className="text-xs font-medium text-emerald-400 uppercase tracking-wide">
-                        Control de calidad
-                      </p>
-
-                      {estadoFinal?.controlCalidad && (
-                        <p className="text-xs text-white/50">
-                          Último registro:{" "}
-                          {estadoFinal.controlCalidad.aprobado ? (
-                            <span className="text-emerald-400">Aprobado</span>
-                          ) : (
-                            <span className="text-rose-400">Rechazado</span>
-                          )}
-                          {estadoFinal.controlCalidad.inspector
-                            ? ` · ${estadoFinal.controlCalidad.inspector}`
-                            : ""}
-                        </p>
                       )}
+                      {canOrdenes ? (
+                        <>
+                          <div className="space-y-2">
+                            <Label>Estado OT</Label>
+                            <Select
+                              value={estadoEdit}
+                              onValueChange={(v) =>
+                                v != null && setEstadoEdit(v as EstadoOT)
+                              }
+                            >
+                              <SelectTrigger className="bg-white/5 border-white/10">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {ESTADOS.map((e) => (
+                                  <SelectItem key={e} value={e}>
+                                    {e}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
 
-                      <div className="flex gap-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant={qcAprobado ? "default" : "outline"}
-                          className={
-                            qcAprobado
-                              ? "bg-emerald-600 hover:bg-emerald-500"
-                              : "border-white/10 text-white/60"
-                          }
-                          onClick={() => setQcAprobado(true)}
-                        >
-                          Aprobar
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant={!qcAprobado ? "default" : "outline"}
-                          className={
-                            !qcAprobado
-                              ? "bg-rose-600 hover:bg-rose-500"
-                              : "border-white/10 text-white/60"
-                          }
-                          onClick={() => setQcAprobado(false)}
-                        >
-                          Rechazar
-                        </Button>
-                      </div>
-
-                      <div className="space-y-1">
-                        <Label className="text-xs">Inspector</Label>
-                        <Input
-                          value={qcInspector}
-                          onChange={(e) => setQcInspector(e.target.value)}
-                          placeholder="Nombre de quien revisa"
-                          className="bg-white/5 border-white/10 h-9"
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <Label className="text-xs">Observaciones</Label>
-                        <Input
-                          value={qcObs}
-                          onChange={(e) => setQcObs(e.target.value)}
-                          placeholder="Detalle de la inspección"
-                          className="bg-white/5 border-white/10 h-9"
-                        />
-                      </div>
-
-                      {qcError && (
-                        <p className="text-xs text-rose-400">{qcError}</p>
-                      )}
-
-                      <Button
-                        type="button"
-                        onClick={onRegistrarQC}
-                        disabled={saving}
-                        className="w-full bg-emerald-600 hover:bg-emerald-500 h-9"
-                      >
-                        {saving
-                          ? "Guardando..."
-                          : "Registrar control de calidad"}
-                      </Button>
-
-                      <p className="text-[11px] text-white/30">
-                        Requiere todas las etapas en TERMINADO. Si rechazas, la
-                        OT vuelve a EN_PROCESO.
-                      </p>
-                    </div>
-
-                    {/* ===== ENTREGA ===== */}
-                    <div className="space-y-3 rounded-xl border border-white/10 p-3">
-                      <p className="text-xs font-medium text-emerald-400 uppercase tracking-wide">
-                        Entrega al cliente
-                      </p>
-
-                      {estadoFinal?.entrega ? (
-                        <div className="text-sm space-y-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-3">
-                          <p className="text-emerald-400 font-medium">
-                            Ya entregado
-                          </p>
-                          <p className="text-white/70 text-xs">
-                            Recibió: {estadoFinal.entrega.recibidoPor || "—"}
-                          </p>
-                          <p className="text-white/70 text-xs">
-                            Entregó: {estadoFinal.entrega.entregadoPor || "—"}
-                          </p>
-                          {estadoFinal.entrega.fecha && (
-                            <p className="text-white/40 text-xs">
-                              {fmtDate(
-                                estadoFinal.entrega.fecha,
-                                "dd/MM/yyyy HH:mm",
-                              )}
+                          {detailError && (
+                            <p className="text-sm text-rose-400">
+                              {detailError}
                             </p>
                           )}
+
+                          <div className="flex justify-end gap-2 pt-2">
+                            <Button
+                              variant="outline"
+                              onClick={() => setOpenDetail(false)}
+                              className="border-white/10 "
+                            >
+                              Cerrar
+                            </Button>
+                            <Button
+                              onClick={guardarEstado}
+                              disabled={
+                                saving || estadoEdit === seleccionada.estado
+                              }
+                              className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40"
+                            >
+                              {saving ? "Guardando..." : "Actualizar estado"}
+                            </Button>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex justify-end pt-2">
+                          <Button
+                            variant="outline"
+                            onClick={() => setOpenDetail(false)}
+                            className="border-white/10 "
+                          >
+                            Cerrar
+                          </Button>
                         </div>
+                      )}
+                    </TabsContent>
+
+                    {/* ===== COTIZACIÓN ===== */}
+                    <TabsContent
+                      value="cotizacion"
+                      className="flex flex-col gap-4 mt-4"
+                    >
+                      {loadingCot ? (
+                        <p className="text-sm text-white/50 text-center py-6">
+                          Cargando ítems...
+                        </p>
                       ) : (
                         <>
-                          <div className="space-y-1">
-                            <Label className="text-xs">
-                              Recibido por{" "}
-                              <span className="text-rose-400">*</span>
-                            </Label>
-                            <Input
-                              value={entRecibidoPor}
-                              onChange={(e) =>
-                                setEntRecibidoPor(e.target.value)
-                              }
-                              placeholder="Nombre de quien retira"
-                              className="bg-white/5 border-white/10 h-9"
-                            />
+                          {/* Lista de ítems */}
+                          <div className="space-y-2 max-h-48 overflow-y-auto">
+                            {!cotizacion?.items?.length ? (
+                              <p className="text-sm text-white/40 text-center py-4">
+                                Sin ítems. Agrega un servicio.
+                              </p>
+                            ) : (
+                              cotizacion.items.map((it: ItemCotizacion) => (
+                                <div
+                                  key={it.id}
+                                  className="flex items-start justify-between gap-2 rounded-xl border border-white/10 bg-white/5 p-3 text-sm"
+                                >
+                                  <div className="min-w-0">
+                                    <p className="font-medium text-white truncate">
+                                      {it.nombre}
+                                    </p>
+                                    <p className="text-xs text-white/40">
+                                      {it.cantidad} ×{" "}
+                                      {formatoSoles(it.precioUnitario)}
+                                      {it.descuento > 0
+                                        ? ` − desc. ${formatoSoles(it.descuento)}`
+                                        : ""}
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    <span className="text-emerald-400 font-medium">
+                                      {formatoSoles(it.subtotal)}
+                                    </span>
+                                    {canCotiz && (
+                                      <Button
+                                        type="button"
+                                        size="icon"
+                                        variant="ghost"
+                                        className="h-8 w-8 text-rose-400 hover:bg-rose-500/10"
+                                        disabled={saving}
+                                        onClick={() => borrarItem(it.id)}
+                                      >
+                                        <Trash2 size={14} />
+                                      </Button>
+                                    )}
+                                  </div>
+                                </div>
+                              ))
+                            )}
                           </div>
 
-                          <div className="space-y-1">
-                            <Label className="text-xs">Entregado por</Label>
-                            <Input
-                              value={entEntregadoPor}
-                              onChange={(e) =>
-                                setEntEntregadoPor(e.target.value)
-                              }
-                              placeholder="Personal de Renova"
-                              className="bg-white/5 border-white/10 h-9"
-                            />
-                          </div>
-
-                          <div className="space-y-1">
-                            <Label className="text-xs">
-                              Kilometraje salida
-                            </Label>
-                            <Input
-                              type="number"
-                              value={entKm}
-                              onChange={(e) => setEntKm(e.target.value)}
-                              placeholder="45200"
-                              className="bg-white/5 border-white/10 h-9"
-                            />
-                          </div>
-
-                          <div className="space-y-1">
-                            <Label className="text-xs">Observaciones</Label>
-                            <Input
-                              value={entObs}
-                              onChange={(e) => setEntObs(e.target.value)}
-                              className="bg-white/5 border-white/10 h-9"
-                            />
-                          </div>
-
-                          <label className="flex items-center gap-2 text-sm text-white/70 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={entConformidad}
-                              onChange={(e) =>
-                                setEntConformidad(e.target.checked)
-                              }
-                              className="rounded border-white/20"
-                            />
-                            Cliente conforme / firma recibida
-                          </label>
-
-                          {entError && (
-                            <p className="text-xs text-rose-400">{entError}</p>
+                          {/* Totales cotización */}
+                          {cotizacion && (
+                            <div className="flex justify-between text-sm border-t border-white/10 pt-2">
+                              <span className="text-white/50">
+                                Total cotizado
+                              </span>
+                              <span className="font-semibold text-white">
+                                {formatoSoles(cotizacion.total)}
+                              </span>
+                            </div>
                           )}
 
-                          <Button
-                            type="button"
-                            onClick={onRegistrarEntrega}
-                            disabled={saving}
-                            className="w-full bg-emerald-600 hover:bg-emerald-500 h-9"
-                          >
-                            {saving ? "Registrando..." : "Confirmar entrega"}
-                          </Button>
+                          {/* Form agregar */}
+                          {canCotiz && (
+                            <div className="space-y-3 rounded-xl border border-white/10 p-3">
+                              <p className="text-xs font-medium text-emerald-400 uppercase tracking-wide">
+                                Agregar ítem
+                              </p>
 
-                          <p className="text-[11px] text-white/30">
-                            Requiere QC aprobado y saldo en 0. La OT pasa a
-                            ENTREGADO.
-                          </p>
+                              {servicios.length > 0 && (
+                                <div className="space-y-2">
+                                  <Label className="text-xs">
+                                    Desde catálogo
+                                  </Label>
+                                  <Select
+                                    value={itemCatalogoId || "manual"}
+                                    onValueChange={(v) => {
+                                      if (v === "manual") {
+                                        setItemCatalogoId("");
+                                        return;
+                                      }
+                                      onPickCatalogo(v);
+                                    }}
+                                  >
+                                    <SelectTrigger className="bg-white/5 border-white/10">
+                                      <SelectValue placeholder="Elegir servicio..." />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="manual">
+                                        Manual
+                                      </SelectItem>
+                                      {servicios.map((s) => (
+                                        <SelectItem key={s.id} value={s}>
+                                          {s.nombre} —{" "}
+                                          {formatoSoles(s.precioBase)}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              )}
+
+                              <div className="space-y-2">
+                                <Label className="text-xs">Nombre *</Label>
+                                <Input
+                                  value={itemNombre}
+                                  onChange={(e) =>
+                                    setItemNombre(e.target.value)
+                                  }
+                                  className="bg-white/5 border-white/10 h-9"
+                                />
+                              </div>
+
+                              <div className="grid grid-cols-3 gap-2">
+                                <div className="space-y-1">
+                                  <Label className="text-xs">Cant.</Label>
+                                  <Input
+                                    type="number"
+                                    min="1"
+                                    value={itemCant}
+                                    onChange={(e) =>
+                                      setItemCant(e.target.value)
+                                    }
+                                    className="bg-white/5 border-white/10 h-9"
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <Label className="text-xs">Precio</Label>
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={itemPrecio}
+                                    onChange={(e) =>
+                                      setItemPrecio(e.target.value)
+                                    }
+                                    className="bg-white/5 border-white/10 h-9"
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <Label className="text-xs">Desc.</Label>
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={itemDescmto}
+                                    onChange={(e) =>
+                                      setItemDescmto(e.target.value)
+                                    }
+                                    className="bg-white/5 border-white/10 h-9"
+                                  />
+                                </div>
+                              </div>
+
+                              {itemError && (
+                                <p className="text-xs text-rose-400">
+                                  {itemError}
+                                </p>
+                              )}
+                              {can("cotizacion.write") ? (
+                                <Button
+                                  type="button"
+                                  onClick={guardarItem}
+                                  disabled={saving}
+                                  className="w-full bg-emerald-600 hover:bg-emerald-500 h-9"
+                                >
+                                  <Plus size={14} className="mr-1.5" />
+                                  {saving ? "Agregando..." : "Agregar a la OT"}
+                                </Button>
+                              ) : null}
+                            </div>
+                          )}
                         </>
                       )}
-                    </div>
-                  </>
-                )}
-              </TabsContent>
-            </Tabs>
+                    </TabsContent>
+
+                    {/*PAGOS*/}
+                    <TabsContent
+                      value="pagos"
+                      className="flex flex-col gap-4 mt-4"
+                    >
+                      {loadingPagos ? (
+                        <p className="text-sm text-white/50 text-center py-6">
+                          Cargando pagos...
+                        </p>
+                      ) : (
+                        <>
+                          {/* Resumen montos */}
+                          <div className="grid grid-cols-3 gap-2 rounded-xl bg-white/5 p-3 text-sm">
+                            <div>
+                              <p className="text-[10px] text-white/40">
+                                Total OT
+                              </p>
+                              <p className="font-medium text-white">
+                                {formatoSoles(
+                                  resumenPagos?.total ??
+                                    seleccionada?.total ??
+                                    0,
+                                )}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] text-white/40">
+                                Cobrado
+                              </p>
+                              <p className="font-medium text-emerald-400">
+                                {formatoSoles(
+                                  resumenPagos?.totalPagado ??
+                                    seleccionada?.totalPagado ??
+                                    0,
+                                )}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] text-white/40">Saldo</p>
+                              <p
+                                className={`font-medium ${
+                                  (resumenPagos?.saldoPendiente ??
+                                    seleccionada?.saldoPendiente ??
+                                    0) > 0
+                                    ? "text-rose-400"
+                                    : "text-white/50"
+                                }`}
+                              >
+                                {formatoSoles(
+                                  resumenPagos?.saldoPendiente ??
+                                    seleccionada?.saldoPendiente ??
+                                    0,
+                                )}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Historial de pagos */}
+                          <div className="space-y-2 max-h-40 overflow-y-auto">
+                            {!resumenPagos?.pagos?.length ? (
+                              <p className="text-sm text-white/40 text-center py-4">
+                                Aún no hay pagos registrados
+                              </p>
+                            ) : (
+                              resumenPagos.pagos.map((p) => (
+                                <div
+                                  key={p.id}
+                                  className="flex items-start justify-between gap-2 rounded-xl border border-white/10 bg-white/5 p-3 text-sm"
+                                >
+                                  <div className="min-w-0">
+                                    <p className="font-medium text-white">
+                                      {formatoSoles(p.monto)}
+                                      <span className="ml-2 text-xs text-emerald-400/90 font-normal">
+                                        {p.metodo}
+                                      </span>
+                                    </p>
+                                    <p className="text-xs text-white/40">
+                                      {p.fecha
+                                        ? fmtDate(p.fecha, "dd/MM/yyyy HH:mm")
+                                        : "—"}
+                                      {p.comprobante
+                                        ? ` · ${p.comprobante}`
+                                        : ""}
+                                    </p>
+                                    {p.observaciones && (
+                                      <p className="text-xs text-white/50 mt-0.5 truncate">
+                                        {p.observaciones}
+                                      </p>
+                                    )}
+                                  </div>
+                                  <Button
+                                    type="button"
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-8 w-8 text-rose-400 hover:bg-rose-500/10 shrink-0"
+                                    disabled={saving}
+                                    onClick={() => borrarPago(p.id)}
+                                  >
+                                    <Trash2 size={14} />
+                                  </Button>
+                                </div>
+                              ))
+                            )}
+                          </div>
+
+                          {/* Form registrar pago */}
+                          <div className="space-y-3 rounded-xl border border-white/10 p-3">
+                            <p className="text-xs font-medium text-emerald-400 uppercase tracking-wide">
+                              Registrar pago
+                            </p>
+
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="space-y-1">
+                                <Label className="text-xs">Monto (S/) *</Label>
+                                <Input
+                                  type="number"
+                                  min="0.01"
+                                  step="0.01"
+                                  value={pagoMonto}
+                                  onChange={(e) => setPagoMonto(e.target.value)}
+                                  placeholder="100.00"
+                                  className="bg-white/5 border-white/10 h-9"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs">Método *</Label>
+                                <Select
+                                  value={pagoMetodo}
+                                  onValueChange={(value) => {
+                                    if (value != null) setPagoMetodo(value);
+                                  }}
+                                >
+                                  <SelectTrigger className="bg-white/5 border-white/10 h-9">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {METODOS.map((m) => (
+                                      <SelectItem key={m} value={m}>
+                                        {m}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </div>
+
+                            <div className="space-y-1">
+                              <Label className="text-xs">Comprobante</Label>
+                              <Input
+                                value={pagoComprobante}
+                                onChange={(e) =>
+                                  setPagoComprobante(e.target.value)
+                                }
+                                placeholder="OP-123 / Nro operación"
+                                className="bg-white/5 border-white/10 h-9"
+                              />
+                            </div>
+
+                            <div className="space-y-1">
+                              <Label className="text-xs">Observaciones</Label>
+                              <Input
+                                value={pagoObs}
+                                onChange={(e) => setPagoObs(e.target.value)}
+                                placeholder="Adelanto, saldo, etc."
+                                className="bg-white/5 border-white/10 h-9"
+                              />
+                            </div>
+
+                            {pagoError && (
+                              <p className="text-xs text-rose-400">
+                                {pagoError}
+                              </p>
+                            )}
+
+                            <Button
+                              type="button"
+                              onClick={guardarPago}
+                              disabled={saving}
+                              className="w-full bg-emerald-600 hover:bg-emerald-500 h-9"
+                            >
+                              <Plus size={14} className="mr-1.5" />
+                              {saving ? "Registrando..." : "Registrar pago"}
+                            </Button>
+                          </div>
+                        </>
+                      )}
+                    </TabsContent>
+
+                    <TabsContent
+                      value="produccion"
+                      className="flex flex-col gap-4 mt-4"
+                    >
+                      {loadingEtapas ? (
+                        <p className="text-sm text-white/50 text-center py-6">
+                          Cargando etapas...
+                        </p>
+                      ) : (
+                        <>
+                          {!resumenEtapas?.etapas?.length ? (
+                            canProd ? (
+                              <div className="space-y-3 rounded-xl border border-white/10 p-4">
+                                <p className="text-sm text-white/60">
+                                  Esta OT aún no tiene etapas de producción.
+                                </p>
+                                <div className="space-y-2">
+                                  <Label className="text-xs">Plantilla</Label>
+                                  <Select
+                                    value={tipoPlantilla}
+                                    onValueChange={(value) => {
+                                      if (value != null)
+                                        setTipoPlantilla(value);
+                                    }}
+                                  >
+                                    <SelectTrigger className="bg-white/5 border-white/10">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {PLANTILLAS_UI.map((p) => (
+                                        <SelectItem
+                                          key={p.value}
+                                          value={p.value}
+                                        >
+                                          {p.label}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <Button
+                                  onClick={onGenerarEtapas}
+                                  disabled={saving}
+                                  className="w-full bg-emerald-600 hover:bg-emerald-500"
+                                >
+                                  {saving ? "Generando..." : "Generar etapas"}
+                                </Button>
+                              </div>
+                            ) : (
+                              <p className="text-sm text-white/50 text-center py-6">
+                                Sin etapas aún.
+                              </p>
+                            )
+                          ) : (
+                            <>
+                              <div className="flex items-center justify-between text-sm">
+                                <span className="text-white/50">
+                                  {
+                                    resumenEtapas.etapas.filter(
+                                      (e) => e.estado === "TERMINADO",
+                                    ).length
+                                  }{" "}
+                                  / {resumenEtapas.etapas.length} terminadas
+                                </span>
+                                <span className="text-xs text-white/40">
+                                  OT: {resumenEtapas.estadoOT}
+                                </span>
+                              </div>
+
+                              <div className="space-y-2 max-h-72 overflow-y-auto">
+                                {resumenEtapas.etapas.map((etapa) => {
+                                  const color =
+                                    COLOR_ETAPA[etapa.estado] || "#94a3b8";
+                                  return (
+                                    <div
+                                      key={etapa.id}
+                                      className="rounded-xl border border-white/10 bg-white/5 p-3 space-y-2"
+                                    >
+                                      <div className="flex items-start justify-between gap-2">
+                                        <div className="min-w-0">
+                                          <p className="text-sm font-medium text-white">
+                                            <span className="text-white/40 mr-1.5">
+                                              {etapa.secuencia}.
+                                            </span>
+                                            {etapa.nombre}
+                                          </p>
+                                          <p className="text-xs text-white/40 mt-0.5">
+                                            {etapa.responsable
+                                              ? `Resp: ${etapa.responsable}`
+                                              : "Sin responsable"}
+                                          </p>
+                                        </div>
+                                        <span
+                                          className="text-[10px] px-2 py-0.5 rounded-md shrink-0 font-medium"
+                                          style={{
+                                            backgroundColor: `${color}22`,
+                                            color,
+                                          }}
+                                        >
+                                          {etapa.estado}
+                                        </span>
+                                      </div>
+
+                                      {canProd &&
+                                        etapa.estado !== "TERMINADO" && (
+                                          <div className="flex gap-2">
+                                            <Input
+                                              value={
+                                                responsableDraft[etapa.id] ??
+                                                etapa.responsable ??
+                                                ""
+                                              }
+                                              onChange={(e) =>
+                                                setResponsableDraft((d) => ({
+                                                  ...d,
+                                                  [etapa.id]: e.target.value,
+                                                }))
+                                              }
+                                              placeholder="Responsable"
+                                              className="bg-white/5 border-white/10 h-8 text-xs"
+                                            />
+                                            <Button
+                                              type="button"
+                                              size="sm"
+                                              variant="outline"
+                                              className="h-8 border-white/10 text-white/70 shrink-0"
+                                              disabled={saving}
+                                              onClick={() => onAsignar(etapa)}
+                                            >
+                                              Asignar
+                                            </Button>
+                                          </div>
+                                        )}
+
+                                      {canProd &&
+                                        etapa.estado !== "TERMINADO" && (
+                                          <div className="flex flex-wrap gap-2">
+                                            {(etapa.estado === "PENDIENTE" ||
+                                              etapa.estado === "PAUSADO") && (
+                                              <Button
+                                                type="button"
+                                                size="sm"
+                                                className="h-8 bg-amber-600 hover:bg-amber-500"
+                                                disabled={saving}
+                                                onClick={() => onIniciar(etapa)}
+                                              >
+                                                Iniciar
+                                              </Button>
+                                            )}
+                                            {etapa.estado === "EN_PROCESO" && (
+                                              <Button
+                                                type="button"
+                                                size="sm"
+                                                variant="outline"
+                                                className="h-8 border-violet-500/30 text-violet-300"
+                                                disabled={saving}
+                                                onClick={() => onPausar(etapa)}
+                                              >
+                                                Pausar
+                                              </Button>
+                                            )}
+                                            {(etapa.estado === "EN_PROCESO" ||
+                                              etapa.estado === "PAUSADO" ||
+                                              etapa.estado === "PENDIENTE") && (
+                                              <Button
+                                                type="button"
+                                                size="sm"
+                                                className="h-8 bg-emerald-600 hover:bg-emerald-500"
+                                                disabled={saving}
+                                                onClick={() =>
+                                                  onTerminar(etapa)
+                                                }
+                                              >
+                                                Terminar
+                                              </Button>
+                                            )}
+                                          </div>
+                                        )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </>
+                          )}
+
+                          {prodError && (
+                            <p className="text-xs text-rose-400">{prodError}</p>
+                          )}
+                        </>
+                      )}
+                    </TabsContent>
+
+                    <TabsContent
+                      value="entrega"
+                      className="flex flex-col gap-5 mt-4"
+                    >
+                      {loadingFinal ? (
+                        <p className="text-sm text-white/50 text-center py-6">
+                          Cargando...
+                        </p>
+                      ) : (
+                        <>
+                          {estadoFinal && (
+                            <div className="grid grid-cols-2 gap-2 rounded-xl bg-white/5 p-3 text-xs">
+                              <div>
+                                <p className="text-white/40">Estado OT</p>
+                                <p className="font-medium text-white">
+                                  {estadoFinal.estado}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-white/40">Etapas</p>
+                                <p className="font-medium text-white">
+                                  {estadoFinal.etapasCompletadas}/
+                                  {estadoFinal.totalEtapas}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-white/40">Saldo</p>
+                                <p
+                                  className={`font-medium ${
+                                    estadoFinal.saldoPendiente > 0
+                                      ? "text-rose-400"
+                                      : "text-emerald-400"
+                                  }`}
+                                >
+                                  {formatoSoles(estadoFinal.saldoPendiente)}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-white/40">QC</p>
+                                <p className="font-medium text-white">
+                                  {estadoFinal.controlCalidad
+                                    ? estadoFinal.controlCalidad.aprobado
+                                      ? "Aprobado"
+                                      : "Rechazado"
+                                    : "Pendiente"}
+                                </p>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* CONTROL DE CALIDAD */}
+                          {canCalidad ? (
+                            <div className="space-y-3 rounded-xl border border-white/10 p-3">
+                              <p className="text-xs font-medium text-emerald-400 uppercase tracking-wide">
+                                Control de calidad
+                              </p>
+
+                              {estadoFinal?.controlCalidad && (
+                                <p className="text-xs text-white/50">
+                                  Último registro:{" "}
+                                  {estadoFinal.controlCalidad.aprobado ? (
+                                    <span className="text-emerald-400">
+                                      Aprobado
+                                    </span>
+                                  ) : (
+                                    <span className="text-rose-400">
+                                      Rechazado
+                                    </span>
+                                  )}
+                                  {estadoFinal.controlCalidad.inspector
+                                    ? ` · ${estadoFinal.controlCalidad.inspector}`
+                                    : ""}
+                                </p>
+                              )}
+
+                              <div className="flex gap-2">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant={qcAprobado ? "default" : "outline"}
+                                  className={
+                                    qcAprobado
+                                      ? "bg-emerald-600 hover:bg-emerald-500"
+                                      : "border-white/10 text-white/60"
+                                  }
+                                  onClick={() => setQcAprobado(true)}
+                                >
+                                  Aprobar
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant={!qcAprobado ? "default" : "outline"}
+                                  className={
+                                    !qcAprobado
+                                      ? "bg-rose-600 hover:bg-rose-500"
+                                      : "border-white/10 text-white/60"
+                                  }
+                                  onClick={() => setQcAprobado(false)}
+                                >
+                                  Rechazar
+                                </Button>
+                              </div>
+
+                              <div className="space-y-1">
+                                <Label className="text-xs">Inspector</Label>
+                                <Input
+                                  value={qcInspector}
+                                  onChange={(e) =>
+                                    setQcInspector(e.target.value)
+                                  }
+                                  placeholder="Nombre de quien revisa"
+                                  className="bg-white/5 border-white/10 h-9"
+                                />
+                              </div>
+
+                              <div className="space-y-1">
+                                <Label className="text-xs">Observaciones</Label>
+                                <Input
+                                  value={qcObs}
+                                  onChange={(e) => setQcObs(e.target.value)}
+                                  placeholder="Detalle de la inspección"
+                                  className="bg-white/5 border-white/10 h-9"
+                                />
+                              </div>
+
+                              {qcError && (
+                                <p className="text-xs text-rose-400">
+                                  {qcError}
+                                </p>
+                              )}
+
+                              <Button
+                                type="button"
+                                onClick={onRegistrarQC}
+                                disabled={saving}
+                                className="w-full bg-emerald-600 hover:bg-emerald-500 h-9"
+                              >
+                                {saving
+                                  ? "Guardando..."
+                                  : "Registrar control de calidad"}
+                              </Button>
+
+                              <p className="text-[11px] text-white/30">
+                                Requiere todas las etapas en TERMINADO. Si
+                                rechazas, la OT vuelve a EN_PROCESO.
+                              </p>
+                            </div>
+                          ) : (
+                            estadoFinal?.controlCalidad && (
+                              <div className="rounded-xl border border-white/10 p-3 text-sm text-white/60">
+                                QC:{" "}
+                                {estadoFinal.controlCalidad.aprobado ? (
+                                  <span className="text-emerald-400">
+                                    Aprobado
+                                  </span>
+                                ) : (
+                                  <span className="text-rose-400">
+                                    Rechazado
+                                  </span>
+                                )}
+                                {estadoFinal.controlCalidad.inspector
+                                  ? ` · ${estadoFinal.controlCalidad.inspector}`
+                                  : ""}
+                              </div>
+                            )
+                          )}
+
+                          {/* ENTREGA */}
+                          <div className="space-y-3 rounded-xl border border-white/10 p-3">
+                            <p className="text-xs font-medium text-emerald-400 uppercase tracking-wide">
+                              Entrega al cliente
+                            </p>
+
+                            {estadoFinal?.entrega ? (
+                              <div className="text-sm space-y-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-3">
+                                <p className="text-emerald-400 font-medium">
+                                  Ya entregado
+                                </p>
+                                <p className="text-white/70 text-xs">
+                                  Recibió:{" "}
+                                  {estadoFinal.entrega.recibidoPor || "—"}
+                                </p>
+                                <p className="text-white/70 text-xs">
+                                  Entregó:{" "}
+                                  {estadoFinal.entrega.entregadoPor || "—"}
+                                </p>
+                                {estadoFinal.entrega.fecha && (
+                                  <p className="text-white/40 text-xs">
+                                    {fmtDate(
+                                      estadoFinal.entrega.fecha,
+                                      "dd/MM/yyyy HH:mm",
+                                    )}
+                                  </p>
+                                )}
+                              </div>
+                            ) : canEntrega ? (
+                              <>
+                                <div className="space-y-1">
+                                  <Label className="text-xs">
+                                    Recibido por{" "}
+                                    <span className="text-rose-400">*</span>
+                                  </Label>
+                                  <Input
+                                    value={entRecibidoPor}
+                                    onChange={(e) =>
+                                      setEntRecibidoPor(e.target.value)
+                                    }
+                                    placeholder="Nombre de quien retira"
+                                    className="bg-white/5 border-white/10 h-9"
+                                  />
+                                </div>
+
+                                <div className="space-y-1">
+                                  <Label className="text-xs">
+                                    Entregado por
+                                  </Label>
+                                  <Input
+                                    value={entEntregadoPor}
+                                    onChange={(e) =>
+                                      setEntEntregadoPor(e.target.value)
+                                    }
+                                    placeholder="Personal de Renova"
+                                    className="bg-white/5 border-white/10 h-9"
+                                  />
+                                </div>
+
+                                <div className="space-y-1">
+                                  <Label className="text-xs">
+                                    Kilometraje salida
+                                  </Label>
+                                  <Input
+                                    type="number"
+                                    value={entKm}
+                                    onChange={(e) => setEntKm(e.target.value)}
+                                    placeholder="45200"
+                                    className="bg-white/5 border-white/10 h-9"
+                                  />
+                                </div>
+
+                                <div className="space-y-1">
+                                  <Label className="text-xs">
+                                    Observaciones
+                                  </Label>
+                                  <Input
+                                    value={entObs}
+                                    onChange={(e) => setEntObs(e.target.value)}
+                                    className="bg-white/5 border-white/10 h-9"
+                                  />
+                                </div>
+
+                                <label className="flex items-center gap-2 text-sm text-white/70 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={entConformidad}
+                                    onChange={(e) =>
+                                      setEntConformidad(e.target.checked)
+                                    }
+                                    className="rounded border-white/20"
+                                  />
+                                  Cliente conforme / firma recibida
+                                </label>
+
+                                {entError && (
+                                  <p className="text-xs text-rose-400">
+                                    {entError}
+                                  </p>
+                                )}
+
+                                <Button
+                                  type="button"
+                                  onClick={onRegistrarEntrega}
+                                  disabled={saving}
+                                  className="w-full bg-emerald-600 hover:bg-emerald-500 h-9"
+                                >
+                                  {saving
+                                    ? "Registrando..."
+                                    : "Confirmar entrega"}
+                                </Button>
+
+                                <p className="text-[11px] text-white/30">
+                                  Requiere QC aprobado y saldo en 0. La OT pasa
+                                  a ENTREGADO.
+                                </p>
+                              </>
+                            ) : (
+                              <p className="text-sm text-white/50">
+                                Pendiente de entrega.
+                              </p>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </TabsContent>
+                  </Tabs>
+                );
+              }}
+            </>
           )}
         </DialogContent>
       </Dialog>
