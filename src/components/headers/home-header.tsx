@@ -1,8 +1,10 @@
+"use client";
 import Image from "next/image";
 import ButtonTheme from "../buttons/buttonTheme";
-import { Button } from "../ui/button";
+import { useAuthStore } from "@/stores/useAuthStore";
 
 export default function HomeHeader() {
+  const logout = useAuthStore((s) => s.logout);
   return (
     <div className="h-16 max-w-7xl w-full items-center flex p-4">
       <div className="flex gap-8 justify-between w-full">

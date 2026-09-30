@@ -3,6 +3,9 @@ import ClientsDashboard from "@/components/dashboard/clientsDashboard";
 import ConfigDashboard from "@/components/dashboard/configDashboard";
 import ProfileDashboard from "@/components/dashboard/profileDashboard";
 import VehiclesDashboard from "@/components/dashboard/vehiclesDashboard";
+import MainDashboard from "@/components/dashboard/mainDashboard";
+import OrdenesDashboard from "@/components/dashboard/ordenesDashboard";
+import UsersAdminDashboard from "@/components/dashboard/usersAdminDashboard";
 import {
   BookOpenText,
   BookUser,
@@ -11,17 +14,20 @@ import {
   Home,
   LucideIcon,
   Settings,
+  Shield,
   User,
   UserSearch,
 } from "lucide-react";
-import MainDashboard from "@/components/dashboard/mainDashboard";
-import OrdenesDashboard from "@/components/dashboard/ordenesDashboard";
+import type { Permission } from "@/stores/useAuthStore";
 
-interface Screens {
+export interface Screens {
   title: string;
   icon: LucideIcon;
   enable: boolean;
   component: React.ComponentType;
+  /** Si se define, solo se muestra si can(permission) es true.
+   *  Si es undefined, visible para cualquier usuario autenticado. */
+  permission?: Permission;
 }
 
 export const screens: Screens[] = [
@@ -30,6 +36,7 @@ export const screens: Screens[] = [
     icon: Home,
     enable: true,
     component: MainDashboard,
+    permission: "stats.view",
   },
   {
     title: "Ordenes",
@@ -54,6 +61,13 @@ export const screens: Screens[] = [
     icon: BookOpenText,
     enable: true,
     component: CatalogoDashboard,
+  },
+  {
+    title: "Usuarios",
+    icon: Shield,
+    enable: true,
+    component: UsersAdminDashboard,
+    permission: "users.manage",
   },
   {
     title: "Contactos",

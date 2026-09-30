@@ -26,6 +26,7 @@ import {
   X,
 } from "lucide-react";
 import { formatDate } from "date-fns";
+import { useAuthStore } from "@/stores/useAuthStore";
 
 type ClienteForm = {
   nombre: string;
@@ -121,6 +122,8 @@ export default function ClientsDashboard() {
     remove,
   } = useClientesStore();
 
+  const canWrite = useAuthStore((s) => s.can("clientes.write"));
+
   const [search, setSearch] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -176,6 +179,7 @@ export default function ClientsDashboard() {
   };
 
   const activarEdicion = () => {
+    if (!canWrite) return;
     setModoEdicion(true);
     setFormError("");
   };
@@ -223,8 +227,8 @@ export default function ClientsDashboard() {
       setSaving(false);
     }
   };
-
   const abrirCrear = () => {
+    if (!canWrite) return;
     setCreateForm(formVacio);
     setCreateError("");
     setOpenCreate(true);
@@ -304,13 +308,15 @@ export default function ClientsDashboard() {
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-          <Button
-            onClick={abrirCrear}
-            className="bg-emerald-600 hover:bg-emerald-500 shrink-0"
-          >
-            <Plus size={16} className="mr-1.5" />
-            Nuevo
-          </Button>
+          {canWrite && (
+            <Button
+              onClick={abrirCrear}
+              className="bg-emerald-600 hover:bg-emerald-500 shrink-0"
+            >
+              <Plus size={16} className="mr-1.5" />
+              Nuevo
+            </Button>
+          )}
         </div>
       </div>
 
@@ -336,11 +342,11 @@ export default function ClientsDashboard() {
                   ? "No se encontraron clientes con ese criterio"
                   : "No hay clientes registrados"}
               </p>
-              {!search && (
+              {!search && canWrite && (
                 <Button
                   onClick={abrirCrear}
                   variant="outline"
-                  className="border-white/10 "
+                  className="border-white/10"
                 >
                   <Plus size={14} className="mr-1.5" />
                   Crear primer cliente
@@ -464,7 +470,7 @@ export default function ClientsDashboard() {
                   variant="outline"
                   onClick={cancelarEdicion}
                   disabled={saving}
-                  className="border-white/10 "
+                  className="border-white/10"
                 >
                   <X size={14} className="mr-1.5" />
                   Cancelar
@@ -477,7 +483,7 @@ export default function ClientsDashboard() {
                   {saving ? "Guardando..." : "Guardar cambios"}
                 </Button>
               </>
-            ) : (
+            ) : canWrite ? (
               <>
                 <Button
                   variant="outline"
@@ -495,6 +501,14 @@ export default function ClientsDashboard() {
                   Editar
                 </Button>
               </>
+            ) : (
+              <Button
+                variant="outline"
+                onClick={() => setOpenDetail(false)}
+                className="border-white/10"
+              >
+                Cerrar
+              </Button>
             )}
           </DialogFooter>
         </DialogContent>

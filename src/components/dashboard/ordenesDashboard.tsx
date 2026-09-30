@@ -4,20 +4,21 @@ import { useEffect } from "react";
 import { useCatalogoStore } from "@/stores/useCatalogoStore";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-import type {
-  ResumenPagos,
-  MetodoPago,
-  ItemCotizacion,
-  CotizacionResumen,
-} from "@/stores/useOrdenesStore";
-
-import { useMemo, useState } from "react";
 import {
-  useOrdenesStore,
+  type ResumenPagos,
+  type MetodoPago,
+  type ItemCotizacion,
   type OrdenTrabajo,
   type EstadoOT,
   type CrearOrdenInput,
+  type CotizacionResumen,
+  type ResumenEtapasOT,
+  type EtapaProduccion,
+  type EstadoFinalOT,
+  useOrdenesStore,
 } from "@/stores/useOrdenesStore";
+
+import { useMemo, useState } from "react";
 import { useVehiculosStore } from "@/stores/useVehiculosStore";
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
@@ -49,6 +50,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { formatDate } from "date-fns";
+import { useAuthStore } from "@/stores/useAuthStore";
 
 const ESTADOS: EstadoOT[] = [
   "BORRADOR",
@@ -180,11 +182,21 @@ export default function OrdenesDashboard() {
     agregarItem,
     eliminarItem,
     registrarPago,
+    generarEtapas,
+    obtenerEtapas,
+    iniciarEtapa,
+    pausarEtapa,
+    terminarEtapa,
+    asignarResponsable,
     eliminarPago,
     obtenerResumenPagos,
+    registrarControlCalidad,
+    registrarEntrega,
+    obtenerEstadoFinal,
   } = useOrdenesStore();
   const { vehiculos } = useVehiculosStore();
   const { servicios } = useCatalogoStore();
+  const can = useAuthStore((s) => s.can);
 
   const [search, setSearch] = useState("");
   const [filtroEstado, setFiltroEstado] = useState<string>("TODOS");
@@ -199,6 +211,29 @@ export default function OrdenesDashboard() {
   const [pagoComprobante, setPagoComprobante] = useState("");
   const [pagoObs, setPagoObs] = useState("");
   const [pagoError, setPagoError] = useState("");
+  //ETAPAS
+  const [resumenEtapas, setResumenEtapas] = useState<ResumenEtapasOT | null>(
+    null,
+  );
+  const [loadingEtapas, setLoadingEtapas] = useState(false);
+  const [tipoPlantilla, setTipoPlantilla] = useState("PINTURA");
+  const [responsableDraft, setResponsableDraft] = useState<
+    Record<string, string>
+  >({});
+  const [prodError, setProdError] = useState("");
+
+  const PLANTILLAS_UI = [
+    { value: "PINTURA", label: "Pintura" },
+    { value: "DETAILING", label: "Detailing" },
+    { value: "GENERAL", label: "General" },
+  ];
+
+  const COLOR_ETAPA: Record<string, string> = {
+    PENDIENTE: "#94a3b8",
+    EN_PROCESO: "#f59e0b",
+    PAUSADO: "#a78bfa",
+    TERMINADO: "#10b981",
+  };
 
   const METODOS = [
     "EFECTIVO",
@@ -235,6 +270,24 @@ export default function OrdenesDashboard() {
   const [itemCatalogoId, setItemCatalogoId] = useState("");
   const [itemError, setItemError] = useState("");
 
+  //ESTADO
+  const [estadoFinal, setEstadoFinal] = useState<EstadoFinalOT | null>(null);
+  const [loadingFinal, setLoadingFinal] = useState(false);
+
+  // QC
+  const [qcAprobado, setQcAprobado] = useState(true);
+  const [qcObs, setQcObs] = useState("");
+  const [qcInspector, setQcInspector] = useState("");
+  const [qcError, setQcError] = useState("");
+
+  // Entrega
+  const [entRecibidoPor, setEntRecibidoPor] = useState("");
+  const [entEntregadoPor, setEntEntregadoPor] = useState("");
+  const [entKm, setEntKm] = useState("");
+  const [entObs, setEntObs] = useState("");
+  const [entConformidad, setEntConformidad] = useState(true);
+  const [entError, setEntError] = useState("");
+
   const cargarCotizacion = async (numeroOT: string) => {
     try {
       setLoadingCot(true);
@@ -259,6 +312,23 @@ export default function OrdenesDashboard() {
     }
   };
 
+  const cargarEtapas = async (numeroOT: string) => {
+    try {
+      setLoadingEtapas(true);
+      setProdError("");
+      const r = await obtenerEtapas(numeroOT);
+      setResumenEtapas(r);
+    } catch (err: any) {
+      // si no hay etapas aún, no es error grave
+      setResumenEtapas(null);
+      if (!err?.message?.includes("no encontrada")) {
+        setProdError(err?.message || "Error al cargar etapas");
+      }
+    } finally {
+      setLoadingEtapas(false);
+    }
+  };
+
   const abrirDetalle = (ot: OrdenTrabajo) => {
     setSeleccionada(ot);
     setEstadoEdit(ot.estado);
@@ -266,10 +336,14 @@ export default function OrdenesDashboard() {
     setTab("resumen");
     setCotizacion(null);
     setResumenPagos(null);
+    setResumenEtapas(null);
+    setProdError("");
     resetPagoForm();
     setOpenDetail(true);
     cargarCotizacion(ot.numero);
     cargarPagos(ot.numero);
+    cargarEtapas(ot.numero);
+    cargarEstadoFinal(ot.numero);
   };
 
   const resetPagoForm = () => {
@@ -471,6 +545,139 @@ export default function OrdenesDashboard() {
     }
   };
 
+  const onGenerarEtapas = async () => {
+    if (!seleccionada) return;
+    try {
+      setSaving(true);
+      setProdError("");
+      const r = await generarEtapas(seleccionada.numero, tipoPlantilla);
+      setResumenEtapas(r);
+    } catch (err: any) {
+      setProdError(err?.message || "No se pudieron generar las etapas");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const onIniciar = async (etapa: EtapaProduccion) => {
+    if (!seleccionada) return;
+    try {
+      setSaving(true);
+      setProdError("");
+      const resp = responsableDraft[etapa.id] || etapa.responsable || undefined;
+      await iniciarEtapa(seleccionada.numero, etapa.id, resp);
+      await cargarEtapas(seleccionada.numero);
+    } catch (err: any) {
+      setProdError(err?.message || "No se pudo iniciar");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const onPausar = async (etapa: EtapaProduccion) => {
+    if (!seleccionada) return;
+    try {
+      setSaving(true);
+      await pausarEtapa(seleccionada.numero, etapa.id);
+      await cargarEtapas(seleccionada.numero);
+    } catch (err: any) {
+      setProdError(err?.message || "No se pudo pausar");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const onTerminar = async (etapa: EtapaProduccion) => {
+    if (!seleccionada) return;
+    try {
+      setSaving(true);
+      await terminarEtapa(seleccionada.numero, etapa.id);
+      await cargarEtapas(seleccionada.numero);
+    } catch (err: any) {
+      setProdError(err?.message || "No se pudo terminar");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const onAsignar = async (etapa: EtapaProduccion) => {
+    if (!seleccionada) return;
+    const nombre = (responsableDraft[etapa.id] || "").trim();
+    if (!nombre) {
+      setProdError("Escribe un responsable");
+      return;
+    }
+    try {
+      setSaving(true);
+      await asignarResponsable(seleccionada.numero, etapa.id, nombre);
+      await cargarEtapas(seleccionada.numero);
+    } catch (err: any) {
+      setProdError(err?.message || "No se pudo asignar");
+    } finally {
+      setSaving(false);
+    }
+  };
+  const cargarEstadoFinal = async (numeroOT: string) => {
+    try {
+      setLoadingFinal(true);
+      const r = await obtenerEstadoFinal(numeroOT);
+      setEstadoFinal(r);
+      if (r.controlCalidad) {
+        setQcAprobado(r.controlCalidad.aprobado);
+        setQcObs(r.controlCalidad.observaciones || "");
+        setQcInspector(r.controlCalidad.inspector || "");
+      }
+    } catch {
+      setEstadoFinal(null);
+    } finally {
+      setLoadingFinal(false);
+    }
+  };
+
+  const onRegistrarQC = async () => {
+    if (!seleccionada) return;
+    try {
+      setSaving(true);
+      setQcError("");
+      const r = await registrarControlCalidad({
+        numeroOT: seleccionada.numero,
+        aprobado: qcAprobado,
+        observaciones: qcObs.trim() || undefined,
+        inspector: qcInspector.trim() || undefined,
+      });
+      setEstadoFinal(r);
+      await cargarEtapas(seleccionada.numero);
+    } catch (err: any) {
+      setQcError(err?.message || "No se pudo registrar el control de calidad");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const onRegistrarEntrega = async () => {
+    if (!seleccionada) return;
+    if (!entRecibidoPor.trim()) {
+      setEntError("Indica quién recibe el vehículo");
+      return;
+    }
+    try {
+      setSaving(true);
+      setEntError("");
+      const r = await registrarEntrega({
+        numeroOT: seleccionada.numero,
+        recibidoPor: entRecibidoPor.trim(),
+        entregadoPor: entEntregadoPor.trim() || undefined,
+        kilometraje: entKm ? Number(entKm) : undefined,
+        observaciones: entObs.trim() || undefined,
+        conformidad: entConformidad,
+      });
+      setEstadoFinal(r);
+    } catch (err: any) {
+      setEntError(err?.message || "No se pudo registrar la entrega");
+    } finally {
+      setSaving(false);
+    }
+  };
   useEffect(() => {
     if (!seleccionada) return;
     const fresh = ordenes.find((o) => o.id === seleccionada.id);
@@ -496,7 +703,12 @@ export default function OrdenesDashboard() {
         </div>
 
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-          <Select value={filtroEstado} onValueChange={setFiltroEstado}>
+          <Select
+            value={filtroEstado}
+            onValueChange={(value) => {
+              if (value != null) setFiltroEstado(value);
+            }}
+          >
             <SelectTrigger className="w-full sm:w-44 bg-white/5 border-white/10">
               <SelectValue placeholder="Estado" />
             </SelectTrigger>
@@ -522,14 +734,15 @@ export default function OrdenesDashboard() {
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-
-          <Button
-            onClick={abrirCrear}
-            className="bg-emerald-600 hover:bg-emerald-500 shrink-0"
-          >
-            <Plus size={16} className="mr-1.5" />
-            Nueva OT
-          </Button>
+          {can("ordenes.write") && (
+            <Button
+              onClick={abrirCrear}
+              className="bg-emerald-600 hover:bg-emerald-500 shrink-0"
+            >
+              <Plus size={16} className="mr-1.5" />
+              Nueva OT
+            </Button>
+          )}
         </div>
       </div>
 
@@ -577,10 +790,14 @@ export default function OrdenesDashboard() {
 
           {seleccionada && (
             <Tabs value={tab} onValueChange={setTab} className="w-full">
-              <TabsList className="grid w-full grid-cols-3 ">
+              <TabsList className="grid w-full grid-cols-5 ">
                 <TabsTrigger value="resumen">Resumen</TabsTrigger>
                 <TabsTrigger value="cotizacion">Cotización</TabsTrigger>
-                <TabsTrigger value="pagos">Pagos</TabsTrigger>
+                {can("pagos.write") && (
+                  <TabsTrigger value="pagos">Pagos</TabsTrigger>
+                )}
+                <TabsTrigger value="produccion">Producción</TabsTrigger>
+                <TabsTrigger value="entrega">QC / Entrega</TabsTrigger>
               </TabsList>
 
               {/* ===== RESUMEN ===== */}
@@ -828,16 +1045,17 @@ export default function OrdenesDashboard() {
                       {itemError && (
                         <p className="text-xs text-rose-400">{itemError}</p>
                       )}
-
-                      <Button
-                        type="button"
-                        onClick={guardarItem}
-                        disabled={saving}
-                        className="w-full bg-emerald-600 hover:bg-emerald-500 h-9"
-                      >
-                        <Plus size={14} className="mr-1.5" />
-                        {saving ? "Agregando..." : "Agregar a la OT"}
-                      </Button>
+                      {can("cotizacion.write") ? (
+                        <Button
+                          type="button"
+                          onClick={guardarItem}
+                          disabled={saving}
+                          className="w-full bg-emerald-600 hover:bg-emerald-500 h-9"
+                        >
+                          <Plus size={14} className="mr-1.5" />
+                          {saving ? "Agregando..." : "Agregar a la OT"}
+                        </Button>
+                      ) : null}
                     </div>
                   </>
                 )}
@@ -960,7 +1178,9 @@ export default function OrdenesDashboard() {
                           <Label className="text-xs">Método *</Label>
                           <Select
                             value={pagoMetodo}
-                            onValueChange={setPagoMetodo}
+                            onValueChange={(value) => {
+                              if (value != null) setPagoMetodo(value);
+                            }}
                           >
                             <SelectTrigger className="bg-white/5 border-white/10 h-9">
                               <SelectValue />
@@ -1009,6 +1229,439 @@ export default function OrdenesDashboard() {
                         <Plus size={14} className="mr-1.5" />
                         {saving ? "Registrando..." : "Registrar pago"}
                       </Button>
+                    </div>
+                  </>
+                )}
+              </TabsContent>
+
+              <TabsContent
+                value="produccion"
+                className="flex flex-col gap-4 mt-4"
+              >
+                {loadingEtapas ? (
+                  <p className="text-sm text-white/50 text-center py-6">
+                    Cargando etapas...
+                  </p>
+                ) : (
+                  <>
+                    {/* Sin etapas → generar plantilla */}
+                    {!resumenEtapas?.etapas?.length ? (
+                      <div className="space-y-3 rounded-xl border border-white/10 p-4">
+                        <p className="text-sm text-white/60">
+                          Esta OT aún no tiene etapas de producción.
+                        </p>
+                        <div className="space-y-2">
+                          <Label className="text-xs">Plantilla</Label>
+                          <Select
+                            value={tipoPlantilla}
+                            onValueChange={(value) => {
+                              if (value != null) setTipoPlantilla(value);
+                            }}
+                          >
+                            <SelectTrigger className="bg-white/5 border-white/10">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {PLANTILLAS_UI.map((p) => (
+                                <SelectItem key={p.value} value={p.value}>
+                                  {p.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <Button
+                          onClick={onGenerarEtapas}
+                          disabled={saving}
+                          className="w-full bg-emerald-600 hover:bg-emerald-500"
+                        >
+                          {saving ? "Generando..." : "Generar etapas"}
+                        </Button>
+                      </div>
+                    ) : (
+                      <>
+                        {/* Progreso */}
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-white/50">
+                            {
+                              resumenEtapas.etapas.filter(
+                                (e) => e.estado === "TERMINADO",
+                              ).length
+                            }{" "}
+                            / {resumenEtapas.etapas.length} terminadas
+                          </span>
+                          <span className="text-xs text-white/40">
+                            OT: {resumenEtapas.estadoOT}
+                          </span>
+                        </div>
+
+                        <div className="space-y-2 max-h-72 overflow-y-auto">
+                          {resumenEtapas.etapas.map((etapa) => {
+                            const color =
+                              COLOR_ETAPA[etapa.estado] || "#94a3b8";
+                            return (
+                              <div
+                                key={etapa.id}
+                                className="rounded-xl border border-white/10 bg-white/5 p-3 space-y-2"
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-medium text-white">
+                                      <span className="text-white/40 mr-1.5">
+                                        {etapa.secuencia}.
+                                      </span>
+                                      {etapa.nombre}
+                                    </p>
+                                    <p className="text-xs text-white/40 mt-0.5">
+                                      {etapa.responsable
+                                        ? `Resp: ${etapa.responsable}`
+                                        : "Sin responsable"}
+                                    </p>
+                                  </div>
+                                  <span
+                                    className="text-[10px] px-2 py-0.5 rounded-md shrink-0 font-medium"
+                                    style={{
+                                      backgroundColor: `${color}22`,
+                                      color,
+                                    }}
+                                  >
+                                    {etapa.estado}
+                                  </span>
+                                </div>
+
+                                {/* Responsable */}
+                                {etapa.estado !== "TERMINADO" && (
+                                  <div className="flex gap-2">
+                                    <Input
+                                      value={
+                                        responsableDraft[etapa.id] ??
+                                        etapa.responsable ??
+                                        ""
+                                      }
+                                      onChange={(e) =>
+                                        setResponsableDraft((d) => ({
+                                          ...d,
+                                          [etapa.id]: e.target.value,
+                                        }))
+                                      }
+                                      placeholder="Responsable"
+                                      className="bg-white/5 border-white/10 h-8 text-xs"
+                                    />
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-8 border-white/10 text-white/70 shrink-0"
+                                      disabled={saving}
+                                      onClick={() => onAsignar(etapa)}
+                                    >
+                                      Asignar
+                                    </Button>
+                                  </div>
+                                )}
+
+                                {/* Acciones */}
+                                {etapa.estado !== "TERMINADO" && (
+                                  <div className="flex flex-wrap gap-2">
+                                    {(etapa.estado === "PENDIENTE" ||
+                                      etapa.estado === "PAUSADO") && (
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        className="h-8 bg-amber-600 hover:bg-amber-500"
+                                        disabled={saving}
+                                        onClick={() => onIniciar(etapa)}
+                                      >
+                                        Iniciar
+                                      </Button>
+                                    )}
+                                    {etapa.estado === "EN_PROCESO" && (
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-8 border-violet-500/30 text-violet-300"
+                                        disabled={saving}
+                                        onClick={() => onPausar(etapa)}
+                                      >
+                                        Pausar
+                                      </Button>
+                                    )}
+                                    {(etapa.estado === "EN_PROCESO" ||
+                                      etapa.estado === "PAUSADO" ||
+                                      etapa.estado === "PENDIENTE") && (
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        className="h-8 bg-emerald-600 hover:bg-emerald-500"
+                                        disabled={saving}
+                                        onClick={() => onTerminar(etapa)}
+                                      >
+                                        Terminar
+                                      </Button>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
+
+                    {prodError && (
+                      <p className="text-xs text-rose-400">{prodError}</p>
+                    )}
+                  </>
+                )}
+              </TabsContent>
+
+              <TabsContent value="entrega" className="flex flex-col gap-5 mt-4">
+                {loadingFinal ? (
+                  <p className="text-sm text-white/50 text-center py-6">
+                    Cargando...
+                  </p>
+                ) : (
+                  <>
+                    {/* Estado rápido */}
+                    {estadoFinal && (
+                      <div className="grid grid-cols-2 gap-2 rounded-xl bg-white/5 p-3 text-xs">
+                        <div>
+                          <p className="text-white/40">Estado OT</p>
+                          <p className="font-medium text-white">
+                            {estadoFinal.estado}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-white/40">Etapas</p>
+                          <p className="font-medium text-white">
+                            {estadoFinal.etapasCompletadas}/
+                            {estadoFinal.totalEtapas}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-white/40">Saldo</p>
+                          <p
+                            className={`font-medium ${
+                              estadoFinal.saldoPendiente > 0
+                                ? "text-rose-400"
+                                : "text-emerald-400"
+                            }`}
+                          >
+                            {formatoSoles(estadoFinal.saldoPendiente)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-white/40">QC</p>
+                          <p className="font-medium text-white">
+                            {estadoFinal.controlCalidad
+                              ? estadoFinal.controlCalidad.aprobado
+                                ? "Aprobado"
+                                : "Rechazado"
+                              : "Pendiente"}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ===== CONTROL DE CALIDAD ===== */}
+                    <div className="space-y-3 rounded-xl border border-white/10 p-3">
+                      <p className="text-xs font-medium text-emerald-400 uppercase tracking-wide">
+                        Control de calidad
+                      </p>
+
+                      {estadoFinal?.controlCalidad && (
+                        <p className="text-xs text-white/50">
+                          Último registro:{" "}
+                          {estadoFinal.controlCalidad.aprobado ? (
+                            <span className="text-emerald-400">Aprobado</span>
+                          ) : (
+                            <span className="text-rose-400">Rechazado</span>
+                          )}
+                          {estadoFinal.controlCalidad.inspector
+                            ? ` · ${estadoFinal.controlCalidad.inspector}`
+                            : ""}
+                        </p>
+                      )}
+
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={qcAprobado ? "default" : "outline"}
+                          className={
+                            qcAprobado
+                              ? "bg-emerald-600 hover:bg-emerald-500"
+                              : "border-white/10 text-white/60"
+                          }
+                          onClick={() => setQcAprobado(true)}
+                        >
+                          Aprobar
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={!qcAprobado ? "default" : "outline"}
+                          className={
+                            !qcAprobado
+                              ? "bg-rose-600 hover:bg-rose-500"
+                              : "border-white/10 text-white/60"
+                          }
+                          onClick={() => setQcAprobado(false)}
+                        >
+                          Rechazar
+                        </Button>
+                      </div>
+
+                      <div className="space-y-1">
+                        <Label className="text-xs">Inspector</Label>
+                        <Input
+                          value={qcInspector}
+                          onChange={(e) => setQcInspector(e.target.value)}
+                          placeholder="Nombre de quien revisa"
+                          className="bg-white/5 border-white/10 h-9"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <Label className="text-xs">Observaciones</Label>
+                        <Input
+                          value={qcObs}
+                          onChange={(e) => setQcObs(e.target.value)}
+                          placeholder="Detalle de la inspección"
+                          className="bg-white/5 border-white/10 h-9"
+                        />
+                      </div>
+
+                      {qcError && (
+                        <p className="text-xs text-rose-400">{qcError}</p>
+                      )}
+
+                      <Button
+                        type="button"
+                        onClick={onRegistrarQC}
+                        disabled={saving}
+                        className="w-full bg-emerald-600 hover:bg-emerald-500 h-9"
+                      >
+                        {saving
+                          ? "Guardando..."
+                          : "Registrar control de calidad"}
+                      </Button>
+
+                      <p className="text-[11px] text-white/30">
+                        Requiere todas las etapas en TERMINADO. Si rechazas, la
+                        OT vuelve a EN_PROCESO.
+                      </p>
+                    </div>
+
+                    {/* ===== ENTREGA ===== */}
+                    <div className="space-y-3 rounded-xl border border-white/10 p-3">
+                      <p className="text-xs font-medium text-emerald-400 uppercase tracking-wide">
+                        Entrega al cliente
+                      </p>
+
+                      {estadoFinal?.entrega ? (
+                        <div className="text-sm space-y-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-3">
+                          <p className="text-emerald-400 font-medium">
+                            Ya entregado
+                          </p>
+                          <p className="text-white/70 text-xs">
+                            Recibió: {estadoFinal.entrega.recibidoPor || "—"}
+                          </p>
+                          <p className="text-white/70 text-xs">
+                            Entregó: {estadoFinal.entrega.entregadoPor || "—"}
+                          </p>
+                          {estadoFinal.entrega.fecha && (
+                            <p className="text-white/40 text-xs">
+                              {fmtDate(
+                                estadoFinal.entrega.fecha,
+                                "dd/MM/yyyy HH:mm",
+                              )}
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <>
+                          <div className="space-y-1">
+                            <Label className="text-xs">
+                              Recibido por{" "}
+                              <span className="text-rose-400">*</span>
+                            </Label>
+                            <Input
+                              value={entRecibidoPor}
+                              onChange={(e) =>
+                                setEntRecibidoPor(e.target.value)
+                              }
+                              placeholder="Nombre de quien retira"
+                              className="bg-white/5 border-white/10 h-9"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <Label className="text-xs">Entregado por</Label>
+                            <Input
+                              value={entEntregadoPor}
+                              onChange={(e) =>
+                                setEntEntregadoPor(e.target.value)
+                              }
+                              placeholder="Personal de Renova"
+                              className="bg-white/5 border-white/10 h-9"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <Label className="text-xs">
+                              Kilometraje salida
+                            </Label>
+                            <Input
+                              type="number"
+                              value={entKm}
+                              onChange={(e) => setEntKm(e.target.value)}
+                              placeholder="45200"
+                              className="bg-white/5 border-white/10 h-9"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <Label className="text-xs">Observaciones</Label>
+                            <Input
+                              value={entObs}
+                              onChange={(e) => setEntObs(e.target.value)}
+                              className="bg-white/5 border-white/10 h-9"
+                            />
+                          </div>
+
+                          <label className="flex items-center gap-2 text-sm text-white/70 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={entConformidad}
+                              onChange={(e) =>
+                                setEntConformidad(e.target.checked)
+                              }
+                              className="rounded border-white/20"
+                            />
+                            Cliente conforme / firma recibida
+                          </label>
+
+                          {entError && (
+                            <p className="text-xs text-rose-400">{entError}</p>
+                          )}
+
+                          <Button
+                            type="button"
+                            onClick={onRegistrarEntrega}
+                            disabled={saving}
+                            className="w-full bg-emerald-600 hover:bg-emerald-500 h-9"
+                          >
+                            {saving ? "Registrando..." : "Confirmar entrega"}
+                          </Button>
+
+                          <p className="text-[11px] text-white/30">
+                            Requiere QC aprobado y saldo en 0. La OT pasa a
+                            ENTREGADO.
+                          </p>
+                        </>
+                      )}
                     </div>
                   </>
                 )}

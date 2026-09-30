@@ -7,6 +7,8 @@ interface DashboardStore {
   setSection: (value: string) => void;
   open: boolean;
   setOpen: (value: boolean) => void;
+  mobileOpen: boolean;
+  setMobileOpen: (v: boolean) => void;
 }
 
 export const useDashboardStore = create<DashboardStore>((set, get) => ({
@@ -16,4 +18,6 @@ export const useDashboardStore = create<DashboardStore>((set, get) => ({
   setSection: (newSection) => set({ section: newSection }),
   open: true,
   setOpen: (value) => set({ open: value }),
+  mobileOpen: true,
+  setMobileOpen: (value) => set({ open: value }),
 }));

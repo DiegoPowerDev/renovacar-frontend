@@ -277,7 +277,7 @@ export default function MainDashboard() {
           <p className="text-red-400 text-sm">{error}</p>
         </div>
       ) : data ? (
-        <div className="flex-1 w-full overflow-y-auto px-12 py-4 flex flex-col gap-4">
+        <div className="flex-1 w-full overflow-y-auto lg:px-12 py-4 flex flex-col gap-4">
           <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
             <KpiCard
               title="Clientes"
