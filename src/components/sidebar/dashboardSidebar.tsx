@@ -8,6 +8,7 @@ import { screens } from "@/content/screens";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import { Separator } from "@base-ui/react";
 
 export default function DashboardSidebar() {
   const router = useRouter();
@@ -24,14 +25,13 @@ export default function DashboardSidebar() {
     (s) => s.enable && (!s.permission || can(s.permission)),
   );
 
-  // Cerrar drawer al cambiar de sección (móvil)
   useEffect(() => {
     setMobileOpen?.(false);
   }, [section, setMobileOpen]);
 
   const handleNav = (title: string) => {
     setSection(title.toLowerCase());
-    setMobileOpen?.(false);
+    setMobileOpen(false);
   };
 
   const handleLogout = async () => {
@@ -78,7 +78,7 @@ export default function DashboardSidebar() {
         {/* Logo */}
         <div
           className={cn(
-            "flex items-center h-16 px-3 border-b border-white/10 shrink-0",
+            "flex items-center h-16 px-3 shrink-0",
             open ? "justify-start" : "justify-center",
           )}
         >
@@ -102,30 +102,20 @@ export default function DashboardSidebar() {
             />
           )}
         </div>
-
+        <div>
+          {profile && open && (
+            <p className="px-3 py-1 text-center text-lg text-white truncate">
+              Hola {profile.nombre || profile.email}
+            </p>
+          )}
+        </div>
         {/* Links */}
         <div className="flex-1 overflow-y-auto py-2">
           <NavItems compact={!open} />
         </div>
 
         {/* User + collapse */}
-        <div className="border-t border-white/10 p-2 space-y-1 shrink-0">
-          {open && profile && (
-            <div className="px-3 py-2 text-xs text-white/40 truncate">
-              {profile.nombre || profile.email}
-            </div>
-          )}
-          <button
-            type="button"
-            onClick={handleLogout}
-            className={cn(
-              "w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-white/60 hover:bg-rose-500/10 hover:text-rose-300 transition-colors",
-              !open && "justify-center px-2",
-            )}
-          >
-            <LogOut size={20} className="shrink-0" />
-            {open && <span>Salir</span>}
-          </button>
+        <div className="border-t border-white/30 p-2 space-y-1 shrink-0">
           <button
             type="button"
             onClick={() => setOpen(!open)}
@@ -140,6 +130,18 @@ export default function DashboardSidebar() {
               <PanelLeft size={20} className="shrink-0" />
             )}
             {open && <span>Contraer</span>}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleLogout}
+            className={cn(
+              "w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-white/60 hover:bg-rose-500/10 hover:text-rose-300 transition-colors",
+              !open && "justify-center px-2",
+            )}
+          >
+            <LogOut size={20} className="shrink-0" />
+            {open && <span>Salir</span>}
           </button>
         </div>
       </aside>
@@ -194,15 +196,17 @@ export default function DashboardSidebar() {
             </div>
 
             <div className="flex-1 overflow-y-auto py-2">
+              <div>
+                {profile && (
+                  <p className="px-3 py-1 text-center text-lg text-white truncate">
+                    Hola {profile.nombre || profile.email}
+                  </p>
+                )}
+              </div>
               <NavItems />
             </div>
 
             <div className="border-t border-white/10 p-3 space-y-1">
-              {profile && (
-                <p className="px-3 py-1 text-xs text-white/40 truncate">
-                  {profile.nombre || profile.email}
-                </p>
-              )}
               <button
                 type="button"
                 onClick={handleLogout}

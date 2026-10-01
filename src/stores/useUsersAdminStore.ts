@@ -1,4 +1,4 @@
-// stores/useUsersAdminStore.ts
+import { auth } from "@/firebase/config";
 import { create } from "zustand";
 import {
   collection,
@@ -12,6 +12,14 @@ import {
 import { db } from "@/firebase/config";
 import type { AppRole, AppUser } from "@/types/auth";
 
+type CreateUserInput = {
+  email: string;
+  password: string;
+  nombre: string;
+  roles: AppRole[];
+  activo?: boolean;
+};
+
 type UsersAdminState = {
   users: AppUser[];
   loading: boolean;
@@ -21,6 +29,8 @@ type UsersAdminState = {
     uid: string,
     data: { roles?: AppRole[]; activo?: boolean; nombre?: string },
   ) => Promise<void>;
+  createUser: (data: CreateUserInput) => Promise<AppUser>;
+  deleteUser: (uid: string) => Promise<void>;
 };
 
 function mapUser(id: string, d: Record<string, any>): AppUser {
@@ -31,6 +41,16 @@ function mapUser(id: string, d: Record<string, any>): AppUser {
     roles: (d.roles as AppRole[]) || ["viewer"],
     activo: d.activo !== false,
     creadoEn: d.creadoEn?.toDate?.() ?? null,
+  };
+}
+
+async function adminHeaders() {
+  const user = auth.currentUser;
+  if (!user) throw new Error("No hay sesión");
+  const token = await user.getIdToken();
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
   };
 }
 
@@ -58,15 +78,47 @@ export const useUsersAdminStore = create<UsersAdminState>((set, get) => ({
   },
 
   updateUser: async (uid, data) => {
-    const ref = doc(db, "usuarios", uid);
-    await updateDoc(ref, {
+    await updateDoc(doc(db, "usuarios", uid), {
       ...data,
       actualizadoEn: serverTimestamp(),
     });
-    // refrescar lista local
-    const users = get().users.map((u) =>
-      u.uid === uid ? { ...u, ...data } : u,
-    );
-    set({ users });
+    set({
+      users: get().users.map((u) => (u.uid === uid ? { ...u, ...data } : u)),
+    });
+  },
+
+  createUser: async (data) => {
+    const res = await fetch("/api/admin/users", {
+      method: "POST",
+      headers: await adminHeaders(),
+      body: JSON.stringify(data),
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || "Error al crear");
+
+    const user: AppUser = {
+      uid: json.uid,
+      email: json.email,
+      nombre: json.nombre,
+      roles: json.roles,
+      activo: json.activo !== false,
+      creadoEn: new Date(),
+    };
+    set({
+      users: [...get().users, user].sort((a, b) =>
+        a.email.localeCompare(b.email),
+      ),
+    });
+    return user;
+  },
+
+  deleteUser: async (uid) => {
+    const res = await fetch(`/api/admin/users/${uid}`, {
+      method: "DELETE",
+      headers: await adminHeaders(),
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || "Error al eliminar");
+    set({ users: get().users.filter((u) => u.uid !== uid) });
   },
 }));

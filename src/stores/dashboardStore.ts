@@ -5,19 +5,19 @@ interface DashboardStore {
   setTheme: (value: "day" | "night") => void;
   section: string;
   setSection: (value: string) => void;
-  open: boolean;
+  open: boolean; // desktop expandido/contraído
   setOpen: (value: boolean) => void;
-  mobileOpen: boolean;
+  mobileOpen: boolean; // drawer móvil
   setMobileOpen: (v: boolean) => void;
 }
 
-export const useDashboardStore = create<DashboardStore>((set, get) => ({
+export const useDashboardStore = create<DashboardStore>((set) => ({
   theme: "day",
   setTheme: (newTheme) => set({ theme: newTheme }),
   section: "dashboard",
-  setSection: (newSection) => set({ section: newSection }),
+  setSection: (newSection) => set({ section: newSection.toLowerCase() }),
   open: true,
   setOpen: (value) => set({ open: value }),
-  mobileOpen: true,
-  setMobileOpen: (value) => set({ open: value }),
+  mobileOpen: false,
+  setMobileOpen: (value) => set({ mobileOpen: value }),
 }));

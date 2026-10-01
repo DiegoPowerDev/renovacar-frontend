@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   useStatsStore,
   type StatsFiltros,
@@ -46,6 +46,9 @@ import {
   Cell,
 } from "recharts";
 import { formatDate } from "date-fns";
+import { useClientesStore } from "@/stores/useClientesStore";
+import { useVehiculosStore } from "@/stores/useVehiculosStore";
+import { useOrdenesStore } from "@/stores/useOrdenesStore";
 
 const COLORES_ESTADO: Record<string, string> = {
   BORRADOR: "#94a3b8",
@@ -108,12 +111,6 @@ function KpiCard({
 }
 
 export default function MainDashboard() {
-  const getDashboard = useStatsStore((s) => s.getDashboard);
-
-  const [data, setData] = useState<DashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
   const [filtros, setFiltros] = useState<StatsFiltros>({
     desde: "",
     hasta: "",
@@ -121,36 +118,21 @@ export default function MainDashboard() {
     placa: "",
   });
 
-  const loadData = async (f?: StatsFiltros) => {
-    try {
-      setLoading(true);
-      setError("");
-
-      const params: StatsFiltros = {};
-      if (f?.desde) params.desde = f.desde;
-      if (f?.hasta) params.hasta = f.hasta;
-      if (f?.estado) params.estado = f.estado;
-      if (f?.placa) params.placa = f.placa;
-
-      const res = await getDashboard(params);
-      setData(res);
-    } catch (err: any) {
-      setError(err?.message || "Error al cargar estadísticas");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const aplicarFiltros = () => loadData(filtros);
+  const [aplicados, setAplicados] = useState<StatsFiltros>({});
+  const clientes = useClientesStore((s) => s.clientes);
+  const vehiculos = useVehiculosStore((s) => s.vehiculos);
+  const ordenes = useOrdenesStore((s) => s.ordenes);
+  const computeDashboard = useStatsStore((s) => s.computeDashboard);
+  const aplicarFiltros = () => setAplicados({ ...filtros });
   const limpiarFiltros = () => {
     const vacios = { desde: "", hasta: "", estado: "", placa: "" };
     setFiltros(vacios);
-    loadData(vacios);
+    setAplicados({});
   };
+
+  const data = useMemo(() => {
+    return computeDashboard(aplicados);
+  }, [clientes, vehiculos, ordenes, aplicados, computeDashboard]);
 
   const pieData =
     data?.porEstado.map((e) => ({
@@ -169,16 +151,6 @@ export default function MainDashboard() {
             Resumen operativo de Renova Car Service
           </p>
         </div>
-
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => loadData(filtros)}
-          className="border-white/10 text-black hover:bg-white/60 w-fit"
-        >
-          <RefreshCw size={14} className="mr-2" />
-          Actualizar
-        </Button>
       </div>
 
       {/* Filtros */}
@@ -265,325 +237,302 @@ export default function MainDashboard() {
         </CardContent>
       </Card>
 
-      {loading ? (
-        <div className="flex items-center justify-center h-64">
-          <div className="flex flex-col items-center gap-3">
-            <div className="w-8 h-8 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
-            <p className="text-sm text-white/50">Cargando dashboard...</p>
-          </div>
+      <div className="flex-1 w-full overflow-y-auto lg:px-12 py-4 flex flex-col gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
+          <KpiCard
+            title="Clientes"
+            value={data.resumen.clientes}
+            icon={Users}
+            accent="sky"
+          />
+          <KpiCard
+            title="Vehículos"
+            value={data.resumen.vehiculos}
+            icon={Car}
+            accent="violet"
+          />
+          <KpiCard
+            title="En proceso"
+            value={data.resumen.enProceso}
+            icon={Wrench}
+            accent="amber"
+          />
+          <KpiCard
+            title="Listos"
+            value={data.resumen.listas}
+            icon={PackageCheck}
+            accent="emerald"
+          />
+          <KpiCard
+            title="Entregados"
+            value={data.resumen.entregadas}
+            icon={CheckCircle2}
+            accent="emerald"
+          />
+          <KpiCard
+            title="Por cobrar"
+            value={formatoSoles(data.finanzas.totalPorCobrar)}
+            icon={AlertCircle}
+            accent="rose"
+            subtitle={`${data.finanzas.margenCobrado}% cobrado`}
+          />
         </div>
-      ) : error ? (
-        <div className="flex items-center justify-center h-64">
-          <p className="text-red-400 text-sm">{error}</p>
-        </div>
-      ) : data ? (
-        <div className="flex-1 w-full overflow-y-auto lg:px-12 py-4 flex flex-col gap-4">
-          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
-            <KpiCard
-              title="Clientes"
-              value={data.resumen.clientes}
-              icon={Users}
-              accent="sky"
-            />
-            <KpiCard
-              title="Vehículos"
-              value={data.resumen.vehiculos}
-              icon={Car}
-              accent="violet"
-            />
-            <KpiCard
-              title="En proceso"
-              value={data.resumen.enProceso}
-              icon={Wrench}
-              accent="amber"
-            />
-            <KpiCard
-              title="Listos"
-              value={data.resumen.listas}
-              icon={PackageCheck}
-              accent="emerald"
-            />
-            <KpiCard
-              title="Entregados"
-              value={data.resumen.entregadas}
-              icon={CheckCircle2}
-              accent="emerald"
-            />
-            <KpiCard
-              title="Por cobrar"
-              value={formatoSoles(data.finanzas.totalPorCobrar)}
-              icon={AlertCircle}
-              accent="rose"
-              subtitle={`${data.finanzas.margenCobrado}% cobrado`}
-            />
-          </div>
 
-          {/* Finanzas + Estados */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            {/* Finanzas */}
-            <Card className="lg:col-span-1">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base text-white">Finanzas</CardTitle>
-                <CardDescription>Resumen del período</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-white/50">Facturado</span>
-                  <span className="font-semibold text-white">
-                    {formatoSoles(data.finanzas.totalFacturado)}
-                  </span>
+        {/* Finanzas + Estados */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* Finanzas */}
+          <Card className="lg:col-span-1">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base text-white">Finanzas</CardTitle>
+              <CardDescription>Resumen del período</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-white/50">Facturado</span>
+                <span className="font-semibold text-white">
+                  {formatoSoles(data.finanzas.totalFacturado)}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-white/50">Cobrado</span>
+                <span className="font-semibold text-emerald-400">
+                  {formatoSoles(data.finanzas.totalCobrado)}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-white/50">Por cobrar</span>
+                <span className="font-semibold text-rose-400">
+                  {formatoSoles(data.finanzas.totalPorCobrar)}
+                </span>
+              </div>
+              <div className="pt-2 border-t border-white/10">
+                <div className="flex justify-between text-xs text-white/40 mb-1">
+                  <span>Progreso de cobro</span>
+                  <span>{data.finanzas.margenCobrado}%</span>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-white/50">Cobrado</span>
-                  <span className="font-semibold text-emerald-400">
-                    {formatoSoles(data.finanzas.totalCobrado)}
-                  </span>
+                <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+                  <div
+                    className="h-full bg-emerald-500 rounded-full transition-all"
+                    style={{ width: `${data.finanzas.margenCobrado}%` }}
+                  />
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-white/50">Por cobrar</span>
-                  <span className="font-semibold text-rose-400">
-                    {formatoSoles(data.finanzas.totalPorCobrar)}
-                  </span>
-                </div>
-                <div className="pt-2 border-t border-white/10">
-                  <div className="flex justify-between text-xs text-white/40 mb-1">
-                    <span>Progreso de cobro</span>
-                    <span>{data.finanzas.margenCobrado}%</span>
-                  </div>
-                  <div className="h-2 rounded-full bg-white/10 overflow-hidden">
-                    <div
-                      className="h-full bg-emerald-500 rounded-full transition-all"
-                      style={{ width: `${data.finanzas.margenCobrado}%` }}
-                    />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+              </div>
+            </CardContent>
+          </Card>
 
-            {/* Gráfico por estado */}
-            <Card className=" lg:col-span-2">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base text-white">
-                  Órdenes por estado
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="h-56 ">
-                  {pieData.length === 0 ? (
-                    <div className="flex items-center justify-center h-full text-white/40 text-sm">
-                      Sin datos
-                    </div>
-                  ) : (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={pieData}>
-                        <CartesianGrid
-                          strokeDasharray="3 3"
-                          stroke="#fafafa20"
-                        />
-                        <XAxis
-                          dataKey="name"
-                          tick={{ fill: "white", fontSize: 11 }}
-                        />
-                        <YAxis
-                          tick={{ fill: "white", fontSize: 11 }}
-                          allowDecimals={false}
-                        />
-                        <Tooltip
-                          cursor={{ fill: "#82181a30" }}
-                          contentStyle={{
-                            fontSize: "14px",
-                            background: "black",
-                            color: "white",
-                            border: "1px solid #333",
-                            borderRadius: 8,
-                          }}
-                        />
-                        <Bar fill="white" dataKey="value" radius={[6, 6, 0, 0]}>
-                          {pieData.map((entry, i) => (
-                            <Cell key={i} fill={entry.color} />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-          {/* Ventas por día + Taller */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <Card className="lg:col-span-2">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base text-white">
-                  Facturación por día
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="h-56">
-                  {data.ventasPorDia.length === 0 ? (
-                    <div className="flex items-center justify-center h-full text-white/40 text-sm">
-                      Sin datos en el período
-                    </div>
-                  ) : (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={data.ventasPorDia}>
-                        <CartesianGrid
-                          strokeDasharray="3 3"
-                          stroke="#ffffff10"
-                        />
-                        <XAxis
-                          dataKey="fecha"
-                          tick={{ fill: "#ffffff60", fontSize: 10 }}
-                          tickFormatter={(v) =>
-                            formatDate(new Date(v), "dd/MM")
-                          }
-                          axisLine={false}
-                        />
-                        <YAxis
-                          tick={{ fill: "#ffffff60", fontSize: 11 }}
-                          axisLine={false}
-                        />
-                        <Tooltip
-                          contentStyle={{
-                            background: "#1a1a1a",
-                            border: "1px solid #333",
-                            borderRadius: 8,
-                          }}
-                          formatter={(value: any) => formatoSoles(value)}
-                          labelFormatter={(l: any) =>
-                            formatDate(new Date(l), "dd MMM yyyy")
-                          }
-                        />
-                        <Legend />
-                        <Line
-                          type="monotone"
-                          dataKey="facturado"
-                          stroke="#10b981"
-                          strokeWidth={2}
-                          dot={false}
-                          name="Facturado"
-                        />
-                        <Line
-                          type="monotone"
-                          dataKey="cobrado"
-                          stroke="#38bdf8"
-                          strokeWidth={2}
-                          dot={false}
-                          name="Cobrado"
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Vehículos en taller */}
-            <Card className="">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base text-white">
-                  En taller
-                </CardTitle>
-                <CardDescription>
-                  {data.vehiculosEnTaller.total} vehículo(s) activos
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2 max-h-52 overflow-y-auto">
-                  {data.vehiculosEnTaller.porEtapa.length === 0 ? (
-                    <p className="text-sm text-white/40">Nada en producción</p>
-                  ) : (
-                    data.vehiculosEnTaller.porEtapa.map((e) => (
-                      <div
-                        key={e.etapa}
-                        className="flex items-center justify-between py-2 border-b border-white/5 last:border-0"
-                      >
-                        <span className="text-sm text-white/70">{e.etapa}</span>
-                        <span className="text-sm font-medium text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md">
-                          {e.cantidad}
-                        </span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-          {/* Últimas órdenes */}
-          <Card className="">
+          {/* Gráfico por estado */}
+          <Card className=" lg:col-span-2">
             <CardHeader className="pb-2">
               <CardTitle className="text-base text-white">
-                Últimas órdenes
+                Órdenes por estado
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm table-fixed">
-                  <thead>
-                    <tr className="text-left text-white/40 border-b border-white/10">
-                      {/* Las 7 columnas exactas con el ancho arbitrario válido */}
-                      <th className="pb-3 font-medium w-[100px]!">OT</th>
-                      <th className="pb-3 font-medium w-[100px]!">Placa</th>
-                      <th className="pb-3 font-medium w-[100px]!">Cliente</th>
-                      <th className="pb-3 font-medium w-[100px]!">Estado</th>
-                      <th className="pb-3 font-medium  w-[100px]!">Total</th>
-                      <th className="pb-3 font-medium  w-[100px]!">Saldo</th>
-                      <th className="pb-3 font-medium  w-[100px]!">Fecha</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-white/5">
-                    {data.ultimasOrdenes.map((ot) => (
-                      <tr
-                        key={ot.numero}
-                        className="border-b border-white/5 hover:bg-white/5 transition-colors"
-                      >
-                        <td className="py-3 font-medium text-emerald-400 truncate">
-                          {ot.numero}
-                        </td>
-                        <td className="py-3 text-white truncate">{ot.placa}</td>
-                        <td className="py-3 text-white/70 truncate">
-                          {ot.cliente}
-                        </td>
-                        <td className="py-3 truncate">
-                          <span
-                            className="text-xs px-2 py-1 rounded-md inline-block"
-                            style={{
-                              backgroundColor: `${COLORES_ESTADO[ot.estado] || "#94a3b8"}20`,
-                              color: COLORES_ESTADO[ot.estado] || "#94a3b8",
-                            }}
-                          >
-                            {ot.estado}
-                          </span>
-                        </td>
-                        <td className="py-3  text-white truncate">
-                          {formatoSoles(ot.total)}
-                        </td>
-                        <td className="py-3  truncate">
-                          <span
-                            className={
-                              ot.saldoPendiente > 0
-                                ? "text-rose-400"
-                                : "text-white/40"
-                            }
-                          >
-                            {formatoSoles(ot.saldoPendiente)}
-                          </span>
-                        </td>
-                        <td className="py-3  text-white/50 truncate">
-                          {formatDate(
-                            new Date(ot.fecha || Date.now()),
-                            "dd/MM/yyyy",
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="h-56 ">
+                {pieData.length === 0 ? (
+                  <div className="flex items-center justify-center h-full text-white/40 text-sm">
+                    Sin datos
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={pieData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#fafafa20" />
+                      <XAxis
+                        dataKey="name"
+                        tick={{ fill: "white", fontSize: 11 }}
+                      />
+                      <YAxis
+                        tick={{ fill: "white", fontSize: 11 }}
+                        allowDecimals={false}
+                      />
+                      <Tooltip
+                        cursor={{ fill: "#82181a30" }}
+                        contentStyle={{
+                          fontSize: "14px",
+                          background: "black",
+                          color: "white",
+                          border: "1px solid #333",
+                          borderRadius: 8,
+                        }}
+                      />
+                      <Bar fill="white" dataKey="value" radius={[6, 6, 0, 0]}>
+                        {pieData.map((entry, i) => (
+                          <Cell key={i} fill={entry.color} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
               </div>
             </CardContent>
           </Card>
         </div>
-      ) : null}
+        {/* Ventas por día + Taller */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <Card className="lg:col-span-2">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base text-white">
+                Facturación por día
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-56">
+                {data.ventasPorDia.length === 0 ? (
+                  <div className="flex items-center justify-center h-full text-white/40 text-sm">
+                    Sin datos en el período
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={data.ventasPorDia}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" />
+                      <XAxis
+                        dataKey="fecha"
+                        tick={{ fill: "#ffffff60", fontSize: 10 }}
+                        tickFormatter={(v) => formatDate(new Date(v), "dd/MM")}
+                        axisLine={false}
+                      />
+                      <YAxis
+                        tick={{ fill: "#ffffff60", fontSize: 11 }}
+                        axisLine={false}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          background: "#1a1a1a",
+                          border: "1px solid #333",
+                          borderRadius: 8,
+                        }}
+                        formatter={(value: any) => formatoSoles(value)}
+                        labelFormatter={(l: any) =>
+                          formatDate(new Date(l), "dd MMM yyyy")
+                        }
+                      />
+                      <Legend />
+                      <Line
+                        type="monotone"
+                        dataKey="facturado"
+                        stroke="#10b981"
+                        strokeWidth={2}
+                        dot={false}
+                        name="Facturado"
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="cobrado"
+                        stroke="#38bdf8"
+                        strokeWidth={2}
+                        dot={false}
+                        name="Cobrado"
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Vehículos en taller */}
+          <Card className="">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base text-white">En taller</CardTitle>
+              <CardDescription>
+                {data.vehiculosEnTaller.total} vehículo(s) activos
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2 max-h-52 overflow-y-auto">
+                {data.vehiculosEnTaller.porEtapa.length === 0 ? (
+                  <p className="text-sm text-white/40">Nada en producción</p>
+                ) : (
+                  data.vehiculosEnTaller.porEtapa.map((e) => (
+                    <div
+                      key={e.etapa}
+                      className="flex items-center justify-between py-2 border-b border-white/5 last:border-0"
+                    >
+                      <span className="text-sm text-white/70">{e.etapa}</span>
+                      <span className="text-sm font-medium text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md">
+                        {e.cantidad}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+        {/* Últimas órdenes */}
+        <Card className="">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base text-white">
+              Últimas órdenes
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm table-fixed">
+                <thead>
+                  <tr className="text-left text-white/40 border-b border-white/10">
+                    {/* Las 7 columnas exactas con el ancho arbitrario válido */}
+                    <th className="pb-3 font-medium w-[100px]!">OT</th>
+                    <th className="pb-3 font-medium w-[100px]!">Placa</th>
+                    <th className="pb-3 font-medium w-[100px]!">Cliente</th>
+                    <th className="pb-3 font-medium w-[100px]!">Estado</th>
+                    <th className="pb-3 font-medium  w-[100px]!">Total</th>
+                    <th className="pb-3 font-medium  w-[100px]!">Saldo</th>
+                    <th className="pb-3 font-medium  w-[100px]!">Fecha</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {data.ultimasOrdenes.map((ot) => (
+                    <tr
+                      key={ot.numero}
+                      className="border-b border-white/5 hover:bg-white/5 transition-colors"
+                    >
+                      <td className="py-3 font-medium text-emerald-400 truncate">
+                        {ot.numero}
+                      </td>
+                      <td className="py-3 text-white truncate">{ot.placa}</td>
+                      <td className="py-3 text-white/70 truncate">
+                        {ot.cliente}
+                      </td>
+                      <td className="py-3 truncate">
+                        <span
+                          className="text-xs px-2 py-1 rounded-md inline-block"
+                          style={{
+                            backgroundColor: `${COLORES_ESTADO[ot.estado] || "#94a3b8"}20`,
+                            color: COLORES_ESTADO[ot.estado] || "#94a3b8",
+                          }}
+                        >
+                          {ot.estado}
+                        </span>
+                      </td>
+                      <td className="py-3  text-white truncate">
+                        {formatoSoles(ot.total)}
+                      </td>
+                      <td className="py-3  truncate">
+                        <span
+                          className={
+                            ot.saldoPendiente > 0
+                              ? "text-rose-400"
+                              : "text-white/40"
+                          }
+                        >
+                          {formatoSoles(ot.saldoPendiente)}
+                        </span>
+                      </td>
+                      <td className="py-3  text-white/50 truncate">
+                        {formatDate(
+                          new Date(ot.fecha || Date.now()),
+                          "dd/MM/yyyy",
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
-import UserDashboard from "@/components/dashboard/mainDashboard";
+import { useEffect, useMemo } from "react";
 import HomeFooter from "@/components/footers/home-footer";
 import DashboardSidebar from "@/components/sidebar/dashboardSidebar";
 import { useDashboardStore } from "@/stores/dashboardStore";
@@ -14,15 +13,20 @@ import MainDashboard from "@/components/dashboard/mainDashboard";
 
 export default function Home() {
   const router = useRouter();
-  const { section, setSection } = useDashboardStore();
+  const section = useDashboardStore((s) => s.section);
+  const setSection = useDashboardStore((s) => s.setSection);
   const { ready, loading, error, startRealtime, stopRealtime } =
     useBootstrapStore();
   const { user, profile, loading: authLoading } = useAuthStore();
   const can = useAuthStore((s) => s.can);
 
-  const visibleScreens = screens.filter(
-    (s) => s.enable && (!s.permission || can(s.permission)),
+  const visibleScreens = useMemo(
+    () =>
+      screens.filter((s) => s.enable && (!s.permission || can(s.permission))),
+    [can],
   );
+
+  const visibleKey = visibleScreens.map((s) => s.title).join("|");
 
   useEffect(() => {
     if (!authLoading && !user) router.replace("/login");
@@ -34,41 +38,63 @@ export default function Home() {
     return () => stopRealtime();
   }, [user, startRealtime, stopRealtime]);
 
+  // Solo corrige si la sección actual NO está permitida
+  useEffect(() => {
+    if (!visibleScreens.length) return;
+
+    const exists = visibleScreens.some(
+      (s) => s.title.toLowerCase() === section.toLowerCase(),
+    );
+
+    if (!exists) {
+      // Preferir Dashboard si está visible; si no, el primero
+      const dash = visibleScreens.find(
+        (s) => s.title.toLowerCase() === "dashboard",
+      );
+      setSection((dash || visibleScreens[0]).title.toLowerCase());
+    }
+  }, [section, visibleKey, setSection]); // no pongas visibleScreens entero
+
   const current =
     visibleScreens.find(
       (e) => e.title.toLowerCase() === section.toLowerCase(),
-    ) || visibleScreens[0];
+    ) ||
+    visibleScreens.find((e) => e.title.toLowerCase() === "dashboard") ||
+    visibleScreens[0];
 
   const DashboardComponent = current?.component || MainDashboard;
 
   useEffect(() => {
-    if (
-      section &&
-      !visibleScreens.some(
-        (s) => s.title.toLowerCase() === section.toLowerCase(),
-      )
-    ) {
-      setSection(visibleScreens[0]?.title || "Dashboard");
+    console.log(section);
+    if (!visibleScreens.length) return;
+
+    const exists = visibleScreens.some(
+      (s) => s.title.toLowerCase() === section.toLowerCase(),
+    );
+
+    if (!exists) {
+      setSection(visibleScreens[0].title.toLowerCase());
     }
   }, [section, visibleScreens, setSection]);
 
   if (authLoading || !user || !profile) {
     return (
-      <div className="h-screen flex items-center justify-center bg-black text-white/50 text-sm">
-        Verificando sesión...
+      <div className="w-full h-screen flex items-center justify-center bg-black text-white/50 text-sm">
+        <div className="w-10 h-10 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
       </div>
     );
-
-    if (loading || !ready) {
-      return (
-        <div className="h-screen flex flex-col items-center justify-center bg-black text-white gap-3">
-          <div className="w-10 h-10 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
-          <p className="text-sm text-white/50">Cargando Renova...</p>
-          {error && <p className="text-sm text-rose-400">{error}</p>}
-        </div>
-      );
-    }
   }
+
+  if (loading || !ready) {
+    return (
+      <div className="w-full h-screen flex flex-col items-center justify-center bg-black text-white gap-3">
+        <div className="w-10 h-10 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
+        <p className="text-sm text-white/50">Cargando Renova...</p>
+        {error && <p className="text-sm text-rose-400">{error}</p>}
+      </div>
+    );
+  }
+
   return (
     <div className="w-full flex-1 flex overflow-hidden flex-col bg-black text-white relative">
       <EmberParticles />

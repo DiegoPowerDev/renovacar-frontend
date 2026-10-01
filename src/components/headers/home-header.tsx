@@ -4,7 +4,8 @@ import ButtonTheme from "../buttons/buttonTheme";
 import { useAuthStore } from "@/stores/useAuthStore";
 
 export default function HomeHeader() {
-  const logout = useAuthStore((s) => s.logout);
+  const profile = useAuthStore((s) => s.profile);
+
   return (
     <div className="h-16 max-w-7xl w-full items-center flex p-4">
       <div className="flex gap-8 justify-between w-full">
@@ -20,6 +21,13 @@ export default function HomeHeader() {
         </div>
         <div className="flex gap-4 items-center">
           <ButtonTheme />
+        </div>
+        <div>
+          {profile && (
+            <p className="px-3 py-1 text-xs text-white/40 truncate">
+              {profile.nombre || profile.email}
+            </p>
+          )}
         </div>
       </div>
     </div>

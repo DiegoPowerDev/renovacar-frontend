@@ -1,4 +1,3 @@
-// components/dashboard/UsersAdminDashboard.tsx
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
@@ -24,6 +23,8 @@ import {
   Pencil,
   Ban,
   CheckCircle2,
+  Plus,
+  Trash2,
 } from "lucide-react";
 
 const ALL_ROLES: { id: AppRole; label: string; desc: string }[] = [
@@ -50,20 +51,78 @@ function RoleBadges({ roles }: { roles: AppRole[] }) {
   );
 }
 
+function RolesChecklist({
+  value,
+  onToggle,
+}: {
+  value: AppRole[];
+  onToggle: (role: AppRole) => void;
+}) {
+  return (
+    <div className="space-y-2 grid grid-cols-2 gap-2">
+      {ALL_ROLES.map((r) => {
+        const checked = value.includes(r.id);
+        return (
+          <label
+            key={r.id}
+            className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${
+              checked
+                ? "border-emerald-500/40 bg-emerald-500/10"
+                : "border-white/10 bg-white/5 hover:bg-white/10"
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={checked}
+              onChange={() => onToggle(r.id)}
+              className="mt-1"
+            />
+            <div>
+              <p className="text-sm font-medium text-white">{r.label}</p>
+              <p className="text-xs text-white/40">{r.desc}</p>
+            </div>
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function UsersAdminDashboard() {
   const can = useAuthStore((s) => s.can);
   const currentUid = useAuthStore((s) => s.user?.uid);
-  const { users, loading, error, fetchUsers, updateUser } =
-    useUsersAdminStore();
+
+  const {
+    users,
+    loading,
+    error,
+    fetchUsers,
+    updateUser,
+    createUser,
+    deleteUser,
+  } = useUsersAdminStore();
 
   const [search, setSearch] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  // Editar
   const [openEdit, setOpenEdit] = useState(false);
   const [selected, setSelected] = useState<AppUser | null>(null);
   const [editNombre, setEditNombre] = useState("");
   const [editRoles, setEditRoles] = useState<AppRole[]>([]);
   const [editActivo, setEditActivo] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
+
+  // Crear
+  const [openCreate, setOpenCreate] = useState(false);
+  const [createEmail, setCreateEmail] = useState("");
+  const [createPassword, setCreatePassword] = useState("");
+  const [createNombre, setCreateNombre] = useState("");
+  const [createRoles, setCreateRoles] = useState<AppRole[]>(["viewer"]);
+  const [createError, setCreateError] = useState("");
+
+  // Eliminar
+  const [openDelete, setOpenDelete] = useState(false);
 
   useEffect(() => {
     if (can("users.manage")) fetchUsers();
@@ -95,13 +154,27 @@ export default function UsersAdminDashboard() {
     );
   };
 
+  const toggleCreateRole = (role: AppRole) => {
+    setCreateRoles((prev) =>
+      prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role],
+    );
+  };
+
+  const abrirCrear = () => {
+    setCreateEmail("");
+    setCreatePassword("");
+    setCreateNombre("");
+    setCreateRoles(["viewer"]);
+    setCreateError("");
+    setOpenCreate(true);
+  };
+
   const guardar = async () => {
     if (!selected) return;
     if (editRoles.length === 0) {
       setFormError("Asigna al menos un rol");
       return;
     }
-    // no quitar admin a ti mismo
     if (
       selected.uid === currentUid &&
       !editRoles.includes("admin") &&
@@ -121,6 +194,58 @@ export default function UsersAdminDashboard() {
       setOpenEdit(false);
     } catch (err: any) {
       setFormError(err?.message || "Error al guardar");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const guardarNuevo = async () => {
+    if (!createEmail.trim() || !createPassword) {
+      setCreateError("Email y contraseña obligatorios");
+      return;
+    }
+    if (createPassword.length < 6) {
+      setCreateError("La contraseña debe tener al menos 6 caracteres");
+      return;
+    }
+    if (createRoles.length === 0) {
+      setCreateError("Asigna al menos un rol");
+      return;
+    }
+    try {
+      setSaving(true);
+      setCreateError("");
+      await createUser({
+        email: createEmail.trim(),
+        password: createPassword,
+        nombre: createNombre.trim() || createEmail.split("@")[0],
+        roles: createRoles,
+        activo: true,
+      });
+      setOpenCreate(false);
+    } catch (err: any) {
+      setCreateError(err?.message || "Error al crear");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const confirmarEliminar = async () => {
+    if (!selected) return;
+    if (selected.uid === currentUid) {
+      setFormError("No puedes eliminarte a ti mismo");
+      setOpenDelete(false);
+      return;
+    }
+    try {
+      setSaving(true);
+      await deleteUser(selected.uid);
+      setOpenDelete(false);
+      setOpenEdit(false);
+      setSelected(null);
+    } catch (err: any) {
+      setFormError(err?.message || "Error al eliminar");
+      setOpenDelete(false);
     } finally {
       setSaving(false);
     }
@@ -152,23 +277,32 @@ export default function UsersAdminDashboard() {
           </div>
         </div>
 
-        <div className="relative w-full sm:w-64">
-          <Search
-            size={16}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40"
-          />
-          <Input
-            className="pl-9 bg-white/5 border-white/10 placeholder:text-white/30"
-            placeholder="Buscar email, nombre, rol..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+          <div className="relative flex-1 sm:w-64">
+            <Search
+              size={16}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40"
+            />
+            <Input
+              className="pl-9 bg-white/5 border-white/10 placeholder:text-white/30"
+              placeholder="Buscar email, nombre, rol..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          <Button
+            onClick={abrirCrear}
+            className="bg-emerald-600 hover:bg-emerald-500 shrink-0"
+          >
+            <Plus size={16} className="mr-1.5" />
+            Nuevo
+          </Button>
         </div>
       </div>
 
       <p className="text-xs text-white/40">
-        Los usuarios se crean en Firebase Authentication. Aquí solo asignas
-        roles y activas/desactivas el acceso a la app.
+        Crea usuarios desde aquí (Authentication + perfil en Firestore). Edita
+        roles, activa/desactiva o elimina el acceso.
       </p>
 
       {/* Lista */}
@@ -180,9 +314,23 @@ export default function UsersAdminDashboard() {
         ) : error ? (
           <p className="text-rose-400 text-sm text-center py-12">{error}</p>
         ) : filtered.length === 0 ? (
-          <p className="text-white/50 text-sm text-center py-12">
-            No hay usuarios. Crea uno en Firebase Auth e inicia sesión una vez.
-          </p>
+          <div className="flex flex-col items-center gap-3 py-12">
+            <p className="text-white/50 text-sm text-center">
+              {search
+                ? "No se encontraron usuarios"
+                : "No hay usuarios registrados"}
+            </p>
+            {!search && (
+              <Button
+                onClick={abrirCrear}
+                variant="outline"
+                className="border-white/10 text-white/70"
+              >
+                <Plus size={14} className="mr-1.5" />
+                Crear primer usuario
+              </Button>
+            )}
+          </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {filtered.map((u) => (
@@ -234,7 +382,7 @@ export default function UsersAdminDashboard() {
 
       {/* Modal editar */}
       <Dialog open={openEdit} onOpenChange={setOpenEdit}>
-        <DialogContent className="bg-zinc-900 border-white/10 text-white sm:max-w-md">
+        <DialogContent className="bg-zinc-900 border-white/10 text-white sm:max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Editar usuario</DialogTitle>
             <DialogDescription className="text-white/50">
@@ -254,34 +402,7 @@ export default function UsersAdminDashboard() {
 
             <div className="space-y-2">
               <Label>Roles</Label>
-              <div className="space-y-2">
-                {ALL_ROLES.map((r) => {
-                  const checked = editRoles.includes(r.id);
-                  return (
-                    <label
-                      key={r.id}
-                      className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${
-                        checked
-                          ? "border-emerald-500/40 bg-emerald-500/10"
-                          : "border-white/10 bg-white/5 hover:bg-white/10"
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => toggleRole(r.id)}
-                        className="mt-1"
-                      />
-                      <div>
-                        <p className="text-sm font-medium text-white">
-                          {r.label}
-                        </p>
-                        <p className="text-xs text-white/40">{r.desc}</p>
-                      </div>
-                    </label>
-                  );
-                })}
-              </div>
+              <RolesChecklist value={editRoles} onToggle={toggleRole} />
             </div>
 
             <label className="flex items-center gap-2 text-sm text-white/70 cursor-pointer">
@@ -296,7 +417,16 @@ export default function UsersAdminDashboard() {
             {formError && <p className="text-sm text-rose-400">{formError}</p>}
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setOpenDelete(true)}
+              disabled={saving || selected?.uid === currentUid}
+              className="border-rose-500/30 text-rose-400 hover:bg-rose-500/10 sm:mr-auto"
+            >
+              <Trash2 size={14} className="mr-1.5" />
+              Eliminar
+            </Button>
             <Button
               variant="outline"
               onClick={() => setOpenEdit(false)}
@@ -311,6 +441,110 @@ export default function UsersAdminDashboard() {
               className="bg-emerald-600 hover:bg-emerald-500"
             >
               {saving ? "Guardando..." : "Guardar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal crear */}
+      <Dialog open={openCreate} onOpenChange={setOpenCreate}>
+        <DialogContent className="bg-zinc-900 border-white/10 text-white sm:max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Nuevo usuario</DialogTitle>
+            <DialogDescription className="text-white/50">
+              Se crea en Authentication y en Firestore
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-col gap-4 py-2">
+            <div className="space-y-2">
+              <Label>Nombre</Label>
+              <Input
+                value={createNombre}
+                onChange={(e) => setCreateNombre(e.target.value)}
+                placeholder="Juan Pérez"
+                className="bg-white/5 border-white/10"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>
+                Email <span className="text-rose-400">*</span>
+              </Label>
+              <Input
+                type="email"
+                value={createEmail}
+                onChange={(e) => setCreateEmail(e.target.value)}
+                placeholder="usuario@renova.com"
+                className="bg-white/5 border-white/10"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>
+                Contraseña <span className="text-rose-400">*</span>
+              </Label>
+              <Input
+                type="password"
+                value={createPassword}
+                onChange={(e) => setCreatePassword(e.target.value)}
+                placeholder="Mínimo 6 caracteres"
+                className="bg-white/5 border-white/10"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Roles</Label>
+              <RolesChecklist value={createRoles} onToggle={toggleCreateRole} />
+            </div>
+            {createError && (
+              <p className="text-sm text-rose-400">{createError}</p>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setOpenCreate(false)}
+              disabled={saving}
+              className="border-white/10 "
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={guardarNuevo}
+              disabled={saving}
+              className="bg-emerald-600 hover:bg-emerald-500"
+            >
+              {saving ? "Creando..." : "Crear usuario"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal eliminar */}
+      <Dialog open={openDelete} onOpenChange={setOpenDelete}>
+        <DialogContent className="bg-zinc-900 border-white/10 text-white sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Eliminar usuario</DialogTitle>
+            <DialogDescription className="text-white/50">
+              ¿Eliminar a{" "}
+              <span className="text-white font-medium">{selected?.email}</span>?
+              Se borra de Authentication y de Firestore. No se puede deshacer.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setOpenDelete(false)}
+              disabled={saving}
+              className="border-white/10 text-white/70"
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={confirmarEliminar}
+              disabled={saving}
+              className="bg-rose-600 hover:bg-rose-500"
+            >
+              {saving ? "Eliminando..." : "Eliminar"}
             </Button>
           </DialogFooter>
         </DialogContent>

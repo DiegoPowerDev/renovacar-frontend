@@ -11,6 +11,7 @@ import {
   BookUser,
   BriefcaseBusiness,
   CarFront,
+  History,
   Home,
   LucideIcon,
   Settings,
@@ -19,14 +20,13 @@ import {
   UserSearch,
 } from "lucide-react";
 import type { Permission } from "@/stores/useAuthStore";
+import HistorialDashboard from "@/components/dashboard/historialDashboard";
 
 export interface Screens {
   title: string;
   icon: LucideIcon;
   enable: boolean;
   component: React.ComponentType;
-  /** Si se define, solo se muestra si can(permission) es true.
-   *  Si es undefined, visible para cualquier usuario autenticado. */
   permission?: Permission;
 }
 
@@ -36,7 +36,6 @@ export const screens: Screens[] = [
     icon: Home,
     enable: true,
     component: MainDashboard,
-    permission: "stats.view",
   },
   {
     title: "Ordenes",
@@ -63,17 +62,10 @@ export const screens: Screens[] = [
     component: CatalogoDashboard,
   },
   {
-    title: "Usuarios",
-    icon: Shield,
+    title: "Historial",
+    icon: History,
     enable: true,
-    component: UsersAdminDashboard,
-    permission: "users.manage",
-  },
-  {
-    title: "Contactos",
-    icon: BookUser,
-    enable: true,
-    component: ConfigDashboard,
+    component: HistorialDashboard,
   },
   {
     title: "Perfil",
@@ -85,6 +77,6 @@ export const screens: Screens[] = [
     title: "Configuración",
     icon: Settings,
     enable: true,
-    component: ConfigDashboard,
+    component: UsersAdminDashboard,
   },
 ];
