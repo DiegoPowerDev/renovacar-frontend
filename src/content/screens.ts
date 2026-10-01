@@ -16,6 +16,7 @@ import {
   LucideIcon,
   Settings,
   Shield,
+  ShieldUser,
   User,
   UserSearch,
 } from "lucide-react";
@@ -74,8 +75,8 @@ export const screens: Screens[] = [
     component: ProfileDashboard,
   },
   {
-    title: "Configuración",
-    icon: Settings,
+    title: "Panel Admin",
+    icon: ShieldUser,
     enable: true,
     component: UsersAdminDashboard,
   },

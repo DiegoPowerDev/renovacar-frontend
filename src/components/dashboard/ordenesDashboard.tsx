@@ -802,7 +802,7 @@ export default function OrdenesDashboard() {
 
       {/* MODAL DETALLE */}
       <Dialog open={openDetail} onOpenChange={setOpenDetail}>
-        <DialogContent className="bg-zinc-900 border-white/10 text-white sm:max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="bg-zinc-900 md:top-2 border-white/10 text-white sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{seleccionada?.numero}</DialogTitle>
             <DialogDescription className="text-white/50">
@@ -811,12 +811,7 @@ export default function OrdenesDashboard() {
           </DialogHeader>
           {seleccionada && (
             <Tabs value={tab} onValueChange={setTab} className="w-full">
-              <TabsList
-                className="grid w-full bg-white/5"
-                style={{
-                  gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))`,
-                }}
-              >
+              <TabsList className="grid w-full bg-white/5 grid-rows-2 grid-cols-3">
                 {tabs.map((t) => (
                   <TabsTrigger key={t.value} value={t.value}>
                     {t.label}
