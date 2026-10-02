@@ -6,7 +6,6 @@ import { useVehiculosStore } from "@/stores/useVehiculosStore";
 import { useOrdenesStore, type OrdenTrabajo } from "@/stores/useOrdenesStore";
 import { useClientesStore } from "@/stores/useClientesStore";
 import { Input } from "../ui/input";
-import { Button } from "../ui/button";
 import {
   Search,
   History,

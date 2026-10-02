@@ -8,7 +8,6 @@ import { screens } from "@/content/screens";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Separator } from "@base-ui/react";
 
 export default function DashboardSidebar() {
   const router = useRouter();

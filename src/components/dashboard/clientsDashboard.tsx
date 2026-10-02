@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useClientesStore, type Cliente } from "@/stores/useClientesStore"; // ajusta la ruta
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";

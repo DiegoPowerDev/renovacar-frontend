@@ -35,7 +35,7 @@ export type Permission =
   | "stats.view"
   | "users.manage";
 
-const ROLE_PERMS: Record<AppRole, Permission[]> = {
+export const ROLE_PERMS: Record<AppRole, Permission[]> = {
   admin: [
     "clientes.write",
     "vehiculos.write",

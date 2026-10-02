@@ -1,6 +1,5 @@
 import CatalogoDashboard from "@/components/dashboard/catalogoDashboard";
 import ClientsDashboard from "@/components/dashboard/clientsDashboard";
-import ConfigDashboard from "@/components/dashboard/configDashboard";
 import ProfileDashboard from "@/components/dashboard/profileDashboard";
 import VehiclesDashboard from "@/components/dashboard/vehiclesDashboard";
 import MainDashboard from "@/components/dashboard/mainDashboard";
@@ -8,14 +7,11 @@ import OrdenesDashboard from "@/components/dashboard/ordenesDashboard";
 import UsersAdminDashboard from "@/components/dashboard/usersAdminDashboard";
 import {
   BookOpenText,
-  BookUser,
   BriefcaseBusiness,
   CarFront,
   History,
   Home,
   LucideIcon,
-  Settings,
-  Shield,
   ShieldUser,
   User,
   UserSearch,
@@ -43,24 +39,28 @@ export const screens: Screens[] = [
     icon: BriefcaseBusiness,
     enable: true,
     component: OrdenesDashboard,
+    permission: "ordenes.write",
   },
   {
     title: "Clientes",
     icon: UserSearch,
     enable: true,
     component: ClientsDashboard,
+    permission: "clientes.write",
   },
   {
     title: "Vehiculos",
     icon: CarFront,
     enable: true,
     component: VehiclesDashboard,
+    permission: "vehiculos.write",
   },
   {
     title: "Catalogo",
     icon: BookOpenText,
     enable: true,
     component: CatalogoDashboard,
+    permission: "catalogo.write",
   },
   {
     title: "Historial",
@@ -79,5 +79,6 @@ export const screens: Screens[] = [
     icon: ShieldUser,
     enable: true,
     component: UsersAdminDashboard,
+    permission: "users.manage",
   },
 ];

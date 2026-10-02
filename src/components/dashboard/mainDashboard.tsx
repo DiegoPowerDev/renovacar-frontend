@@ -1,11 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import {
-  useStatsStore,
-  type StatsFiltros,
-  type DashboardData,
-} from "@/stores/useStatsStore"; // ajusta la ruta
+import { useMemo, useState } from "react";
+import { useStatsStore, type StatsFiltros } from "@/stores/useStatsStore"; // ajusta la ruta
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,8 +25,9 @@ import {
   CheckCircle2,
   PackageCheck,
   AlertCircle,
-  RefreshCw,
   Search,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import {
   BarChart,
@@ -118,6 +115,8 @@ export default function MainDashboard() {
     placa: "",
   });
 
+  const [openMobile, setOpenMobile] = useState(true);
+
   const [aplicados, setAplicados] = useState<StatsFiltros>({});
   const clientes = useClientesStore((s) => s.clientes);
   const vehiculos = useVehiculosStore((s) => s.vehiculos);
@@ -154,86 +153,104 @@ export default function MainDashboard() {
       </div>
 
       {/* Filtros */}
-      <Card className="flex h-24 bg-white/10 p-4 shrink-0">
+      <Card className="flex h-fit bg-white/10 p-4 shrink-0">
         <CardContent className="text-white grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-          <div>
-            <label className="text-xs text-white/40 mb-1 block">Desde</label>
-            <Input
-              type="date"
-              value={filtros.desde || ""}
-              onChange={(e) =>
-                setFiltros((f) => ({ ...f, desde: e.target.value }))
-              }
-              className="bg-white/5 text-white border-white/10"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-white/40 mb-1 block">Hasta</label>
-            <Input
-              type="date"
-              value={filtros.hasta || ""}
-              onChange={(e) =>
-                setFiltros((f) => ({ ...f, hasta: e.target.value }))
-              }
-              className="bg-white/5 border-white/10 text-white"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-white/40 mb-1 block">Estado</label>
-            <Select
-              value={filtros.estado || "TODOS"}
-              onValueChange={(v) =>
-                setFiltros((f: any) => ({
-                  ...f,
-                  estado: v === "TODOS" ? "" : v,
-                }))
-              }
-            >
-              <SelectTrigger className="bg-white/5 border-white/10">
-                <SelectValue placeholder="Todos" />
-              </SelectTrigger>
-              <SelectContent side="top">
-                <SelectItem value="TODOS">Todos</SelectItem>
-                <SelectItem value="BORRADOR">Borrador</SelectItem>
-                <SelectItem value="EN_PROCESO">En proceso</SelectItem>
-                <SelectItem value="LISTO">Listo</SelectItem>
-                <SelectItem value="ENTREGADO">Entregado</SelectItem>
-                <SelectItem value="CANCELADA">Cancelada</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <label className="text-xs text-white/40 mb-1 block">Placa</label>
-            <div className="relative">
-              <Search
-                size={14}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40"
-              />
-              <Input
-                placeholder="ABC-123"
-                value={filtros.placa || ""}
-                onChange={(e) =>
-                  setFiltros((f) => ({ ...f, placa: e.target.value }))
-                }
-                className="pl-9 bg-white/5 border-white/10"
-              />
+          <div className="flex md:hidden justify-between">
+            <div>Filtros</div>{" "}
+            <div onClick={() => setOpenMobile(!openMobile)}>
+              {openMobile ? <ChevronUp /> : <ChevronDown />}
             </div>
           </div>
-          <div className="flex items-end gap-2">
-            <Button
-              onClick={aplicarFiltros}
-              className="flex-1 bg-emerald-600 hover:bg-emerald-500"
-            >
-              Filtrar
-            </Button>
-            <Button
-              variant="outline"
-              onClick={limpiarFiltros}
-              className="border-white/10 text-black"
-            >
-              Limpiar
-            </Button>
-          </div>
+          {openMobile && (
+            <>
+              <div>
+                <label className="text-xs text-white/40 mb-1 block">
+                  Desde
+                </label>
+                <Input
+                  type="date"
+                  value={filtros.desde || ""}
+                  onChange={(e) =>
+                    setFiltros((f) => ({ ...f, desde: e.target.value }))
+                  }
+                  className="bg-white/5 text-white border-white/10"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-white/40 mb-1 block">
+                  Hasta
+                </label>
+                <Input
+                  type="date"
+                  value={filtros.hasta || ""}
+                  onChange={(e) =>
+                    setFiltros((f) => ({ ...f, hasta: e.target.value }))
+                  }
+                  className="bg-white/5 border-white/10 text-white"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-white/40 mb-1 block">
+                  Estado
+                </label>
+                <Select
+                  value={filtros.estado || "TODOS"}
+                  onValueChange={(v) =>
+                    setFiltros((f: any) => ({
+                      ...f,
+                      estado: v === "TODOS" ? "" : v,
+                    }))
+                  }
+                >
+                  <SelectTrigger className="bg-white/5 border-white/10">
+                    <SelectValue placeholder="Todos" />
+                  </SelectTrigger>
+                  <SelectContent side="top">
+                    <SelectItem value="TODOS">Todos</SelectItem>
+                    <SelectItem value="BORRADOR">Borrador</SelectItem>
+                    <SelectItem value="EN_PROCESO">En proceso</SelectItem>
+                    <SelectItem value="LISTO">Listo</SelectItem>
+                    <SelectItem value="ENTREGADO">Entregado</SelectItem>
+                    <SelectItem value="CANCELADA">Cancelada</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-xs text-white/40 mb-1 block">
+                  Placa
+                </label>
+                <div className="relative">
+                  <Search
+                    size={14}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40"
+                  />
+                  <Input
+                    placeholder="ABC-123"
+                    value={filtros.placa || ""}
+                    onChange={(e) =>
+                      setFiltros((f) => ({ ...f, placa: e.target.value }))
+                    }
+                    className="pl-9 bg-white/5 border-white/10"
+                  />
+                </div>
+              </div>
+              <div className="flex items-end gap-2">
+                <Button
+                  onClick={aplicarFiltros}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-500"
+                >
+                  Filtrar
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={limpiarFiltros}
+                  className="border-white/10 text-black"
+                >
+                  Limpiar
+                </Button>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
 
